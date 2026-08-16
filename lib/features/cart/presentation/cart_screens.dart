@@ -675,7 +675,11 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  String _method = 'UPI';
+  /// Mangaale currently settles customer orders in cash on delivery. No payment
+  /// gateway is integrated, so this is fixed rather than selectable — showing a
+  /// UPI/card choice we cannot actually charge would be misleading.
+  static const String _method = 'Cash on Delivery';
+
   bool _paying = false;
 
   /// Generated once per checkout screen, not per tap, so a retry after a lost
@@ -708,7 +712,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             restaurantId: state.cartRestaurantId,
             lines: lines,
             idempotencyKey: _idempotencyKey,
-            paymentMethod: _method,
+            paymentMethod: 'cod',
           );
       ref.read(appControllerProvider.notifier).clearCart();
       ref.invalidate(ordersProvider);
@@ -730,9 +734,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final total = ref.watch(cartTotalProvider);
-    final savings = widget.shared ? (total * 0.1).round() : 0;
-    final payable = total + 39 - savings;
+    // Totals, taxes, fees and round-off come from /customer-web/cart/validate.
+    // Nothing on this screen computes money — the button must show exactly what
+    // the backend will charge.
+    final bill = ref.watch(cartBillProvider);
+    final payable = bill.value?.grandTotal ?? 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Payment')),
       body: ListView(
@@ -751,7 +757,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'You’re saving ₹$savings with a shared order',
+                      'You’re saving ₹${bill.value?.discount ?? 0} with a shared order',
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         color: AppColors.dark,
@@ -767,66 +773,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 10),
-          RadioGroup<String>(
-            groupValue: _method,
-            onChanged: (value) => setState(() => _method = value!),
-            child: Column(
-              children: [
-                for (final method in const [
-                  (
-                    'UPI',
-                    Icons.qr_code_rounded,
-                    'Google Pay, PhonePe or any UPI app',
-                  ),
-                  ('Card', Icons.credit_card_rounded, 'Credit or debit card'),
-                  (
-                    'Cash on Delivery',
-                    Icons.payments_outlined,
-                    'Pay when your order arrives',
-                  ),
-                  (
-                    'Wallet',
-                    Icons.account_balance_wallet_outlined,
-                    'Balance: ₹1,284',
-                  ),
-                  (
-                    'Net Banking',
-                    Icons.account_balance_outlined,
-                    'All major banks',
-                  ),
-                ])
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 9),
-                    color: _method == method.$1
-                        ? AppColors.light
-                        : Colors.white,
-                    child: RadioListTile<String>(
-                      value: method.$1,
-                      secondary: Icon(method.$2, color: AppColors.dark),
-                      title: Text(
-                        method.$1,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(method.$3),
-                    ),
-                  ),
-              ],
+          // Only Cash on Delivery is offered: no payment gateway is integrated
+          // yet, so offering UPI/card/net-banking would promise a charge the
+          // platform cannot take.
+          Card(
+            color: AppColors.light,
+            child: ListTile(
+              leading: const Icon(
+                Icons.payments_outlined,
+                color: AppColors.dark,
+              ),
+              title: const Text(
+                _method,
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text('Pay in cash when your order arrives'),
+              trailing: const Icon(
+                Icons.check_circle_rounded,
+                color: AppColors.success,
+              ),
             ),
           ),
           const SizedBox(height: 14),
-          Card(
+          const Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.verified_user_outlined,
-                    color: AppColors.success,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
+                  Icon(Icons.verified_user_outlined, color: AppColors.success),
+                  SizedBox(width: 10),
+                  Expanded(
                     child: Text(
-                      'Payments are mocked for this frontend demo. No real charge will be made.',
+                      'Online payment is coming soon. For now every order is '
+                      'paid in cash on delivery.',
                     ),
                   ),
                 ],

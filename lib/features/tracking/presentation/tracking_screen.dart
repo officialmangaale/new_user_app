@@ -1,21 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../orders/providers/orders_providers.dart';
 import 'puzzle_game.dart';
 
-class TrackingScreen extends StatefulWidget {
+class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({required this.orderId, super.key});
 
   final String orderId;
 
   @override
-  State<TrackingScreen> createState() => _TrackingScreenState();
+  ConsumerState<TrackingScreen> createState() => _TrackingScreenState();
 }
 
-class _TrackingScreenState extends State<TrackingScreen> {
+class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   static const _statuses = [
     'Order confirmed',
     'Preparing',
@@ -25,18 +27,50 @@ class _TrackingScreenState extends State<TrackingScreen> {
     'Arriving soon',
     'Delivered',
   ];
-  int _statusIndex = 4;
+
+  int _statusIndex = 0;
   bool _importantAlert = false;
-  Timer? _statusTimer;
+  Timer? _pollTimer;
   Timer? _alertTimer;
 
   @override
   void initState() {
     super.initState();
-    _statusTimer = Timer.periodic(const Duration(seconds: 18), (_) {
-      if (!mounted || _statusIndex >= _statuses.length - 1) return;
+    // Polling, not a socket: the app has no WebSocket dependency, and the
+    // backend order stream would need one. 15 s matches the KDS fallback.
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) ref.invalidate(orderTrackingProvider(widget.orderId));
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _alertTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Maps the backend's canonical order statuses
+  /// (restaurant-service/services/order_status_contract.go) onto this screen's
+  /// seven-step timeline.
+  int _indexForStatus(String status) => switch (status.toLowerCase()) {
+    'pending' || 'confirmed' || 'accepted' || 'placed' => 0,
+    'preparing' => 1,
+    'ready' || 'ready_to_serve' => 2,
+    'picked_up' => 3,
+    'out_for_delivery' || 'on_the_way' => 4,
+    'delivered' || 'completed' || 'done' => 6,
+    _ => 0,
+  };
+
+  void _syncStatus(String status) {
+    final next = _indexForStatus(status);
+    if (next == _statusIndex) return;
+    // Defer: this runs during build, so state changes must wait a frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       setState(() {
-        _statusIndex++;
+        _statusIndex = next;
         _importantAlert = true;
       });
       _alertTimer?.cancel();
@@ -47,15 +81,14 @@ class _TrackingScreenState extends State<TrackingScreen> {
   }
 
   @override
-  void dispose() {
-    _statusTimer?.cancel();
-    _alertTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final eta = _statusIndex >= 5 ? '2 min' : '11 min';
+    final tracking = ref.watch(orderTrackingProvider(widget.orderId));
+    final live = tracking.value;
+    if (live != null) _syncStatus(live.status);
+
+    final eta = (live != null && live.etaMinutes > 0)
+        ? '${live.etaMinutes} min'
+        : (_statusIndex >= 5 ? 'Arriving' : '—');
     return Scaffold(
       body: CustomScrollView(
         slivers: [
