@@ -11,7 +11,9 @@ import 'package:turquoise_delivery/features/notifications/presentation/notificat
 import 'package:turquoise_delivery/features/orders/presentation/orders_screen.dart';
 import 'package:turquoise_delivery/features/shared_orders/presentation/shared_order_screens.dart';
 import 'package:turquoise_delivery/features/tracking/presentation/tracking_screen.dart';
+import 'package:turquoise_delivery/features/catalog/providers/catalog_providers.dart';
 import 'package:turquoise_delivery/shared/mock_data/mock_data.dart';
+import 'package:turquoise_delivery/shared/repositories/catalog_repository.dart';
 import 'package:turquoise_delivery/shared/models/app_models.dart';
 import 'package:turquoise_delivery/shared/widgets/delivery_cards.dart';
 import 'package:turquoise_delivery/features/app_state/providers/app_controller.dart';
@@ -66,7 +68,18 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final container = ProviderContainer();
+    // The screen now loads its restaurant and menu over HTTP. Override both so
+    // the test exercises layout only and leaves no pending request timers.
+    final container = ProviderContainer(
+      overrides: [
+        restaurantDetailProvider(
+          'r1',
+        ).overrideWith((ref) async => MockData.restaurantById('r1')),
+        restaurantMenuProvider(
+          'r1',
+        ).overrideWith((ref) async => const <MenuSection>[]),
+      ],
+    );
     addTearDown(container.dispose);
     container
         .read(appControllerProvider.notifier)

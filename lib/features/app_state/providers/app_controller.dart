@@ -15,6 +15,7 @@ class AppState {
     this.foodCart = const {},
     this.groceryCart = const {},
     this.knownItems = const {},
+    this.cartRestaurantId = '',
     this.joinedGroupIds = const {},
     this.activeHomeTab = 1,
   });
@@ -31,6 +32,9 @@ class AppState {
   /// global catalog to look an id up in the way `MockData.itemById` allowed.
   /// The cart therefore remembers the item it was given.
   final Map<String, CatalogItem> knownItems;
+
+  /// Restaurant the current cart belongs to. Required by order placement.
+  final String cartRestaurantId;
   final Set<String> joinedGroupIds;
   final int activeHomeTab;
 
@@ -44,6 +48,7 @@ class AppState {
     Map<String, int>? foodCart,
     Map<String, int>? groceryCart,
     Map<String, CatalogItem>? knownItems,
+    String? cartRestaurantId,
     Set<String>? joinedGroupIds,
     int? activeHomeTab,
   }) {
@@ -54,6 +59,7 @@ class AppState {
       foodCart: foodCart ?? this.foodCart,
       groceryCart: groceryCart ?? this.groceryCart,
       knownItems: knownItems ?? this.knownItems,
+      cartRestaurantId: cartRestaurantId ?? this.cartRestaurantId,
       joinedGroupIds: joinedGroupIds ?? this.joinedGroupIds,
       activeHomeTab: activeHomeTab ?? this.activeHomeTab,
     );
@@ -118,7 +124,10 @@ class AppController extends Notifier<AppState> {
 
   /// Adds one unit of [item], remembering the item so the cart can render it
   /// without a global catalog lookup.
-  void addItem(CatalogItem item) {
+  ///
+  /// [restaurantId] is recorded because order placement requires it and a
+  /// [CatalogItem] only carries the store's display name.
+  void addItem(CatalogItem item, {String? restaurantId}) {
     final food = item.type == CatalogItemType.food;
     final next = Map<String, int>.from(
       food ? state.foodCart : state.groceryCart,
@@ -129,6 +138,9 @@ class AppController extends Notifier<AppState> {
       foodCart: food ? next : null,
       groceryCart: food ? null : next,
       knownItems: {...state.knownItems, item.id: item},
+      cartRestaurantId: (restaurantId != null && restaurantId.isNotEmpty)
+          ? restaurantId
+          : null,
     );
   }
 

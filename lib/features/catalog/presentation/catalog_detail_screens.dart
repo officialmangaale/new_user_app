@@ -9,7 +9,9 @@ import '../../../core/widgets/premium_components.dart';
 import '../../../shared/mock_data/mock_data.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
+import '../../../shared/repositories/catalog_repository.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../providers/catalog_providers.dart';
 
 class RestaurantDetailsScreen extends ConsumerStatefulWidget {
   const RestaurantDetailsScreen({required this.restaurantId, super.key});
@@ -28,10 +30,27 @@ class _RestaurantDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final restaurant = MockData.restaurantById(widget.restaurantId);
-    final allItems = MockData.catalog
-        .where((item) => item.type == CatalogItemType.food)
-        .toList();
+    // Detail and menu are separate endpoints; the header renders as soon as the
+    // restaurant resolves rather than waiting for the full menu.
+    final restaurant =
+        ref.watch(restaurantDetailProvider(widget.restaurantId)).value ??
+        const Restaurant(
+          id: '',
+          name: '',
+          cuisine: '',
+          rating: 0,
+          deliveryMinutes: 0,
+          distanceKm: 0,
+          deliveryFee: 0,
+          discount: 0,
+          imageUrl: '',
+        );
+    final allItems = [
+      for (final section
+          in ref.watch(restaurantMenuProvider(widget.restaurantId)).value ??
+              const <MenuSection>[])
+        ...section.items,
+    ];
     final items = allItems
         .where(
           (item) =>
@@ -219,7 +238,7 @@ class _RestaurantDetailsScreenState
                       onTap: () => context.push('/food-item/${item.id}'),
                       onAdd: () => ref
                           .read(appControllerProvider.notifier)
-                          .addItem(item),
+                          .addItem(item, restaurantId: widget.restaurantId),
                       onRemove: () => ref
                           .read(appControllerProvider.notifier)
                           .removeItem(item.id),

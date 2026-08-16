@@ -7,7 +7,10 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../core/services/api_exception.dart';
+import '../../../shared/repositories/orders_repository.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../orders/providers/orders_providers.dart';
 import '../../authentication/presentation/auth_screens.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
@@ -675,6 +678,56 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   String _method = 'UPI';
   bool _paying = false;
 
+  /// Generated once per checkout screen, not per tap, so a retry after a lost
+  /// response resolves to the original order instead of creating a second one.
+  final String _idempotencyKey = OrdersRepository.newIdempotencyKey();
+
+  /// Places the order against restaurant-service. Navigation only happens on a
+  /// confirmed server response — a failure never shows success.
+  Future<void> _placeOrder() async {
+    final state = ref.read(appControllerProvider);
+    final lines = ref.read(cartLinesProvider);
+
+    if (lines.isEmpty) {
+      _showError('Your cart is empty.');
+      return;
+    }
+    if (state.cartRestaurantId.isEmpty) {
+      _showError(
+        'We could not tell which restaurant this cart belongs to. '
+        'Please reopen the restaurant and add items again.',
+      );
+      return;
+    }
+
+    setState(() => _paying = true);
+    try {
+      final placed = await ref
+          .read(ordersRepositoryProvider)
+          .placeOrder(
+            restaurantId: state.cartRestaurantId,
+            lines: lines,
+            idempotencyKey: _idempotencyKey,
+            paymentMethod: _method,
+          );
+      ref.read(appControllerProvider.notifier).clearCart();
+      ref.invalidate(ordersProvider);
+      if (!mounted) return;
+      context.go('/tracking/${placed.orderId}');
+    } on ApiException catch (error) {
+      _showError(error.message);
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final total = ref.watch(cartTotalProvider);
@@ -788,12 +841,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: AppButton(
             label: 'Pay ₹$payable with $_method',
             loading: _paying,
-            onPressed: () async {
-              setState(() => _paying = true);
-              await Future<void>.delayed(const Duration(milliseconds: 900));
-              ref.read(appControllerProvider.notifier).clearCart();
-              if (context.mounted) context.go('/tracking/TQ240761');
-            },
+            onPressed: _paying ? null : _placeOrder,
           ),
         ),
       ),
