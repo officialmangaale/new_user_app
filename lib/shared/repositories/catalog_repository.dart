@@ -110,6 +110,64 @@ class CatalogRepository {
     ];
   }
 
+  /// GET /customer-web/categories — home category rail.
+  ///
+  /// Mirrors the web client's `getCustomerWebCategories`: same radius default
+  /// and `include_all`, so the app and web show the same rail.
+  Future<List<HomeCategory>> fetchCategories({
+    double? lat,
+    double? lng,
+    double radiusKm = 7,
+  }) async {
+    final raw = await _get(
+      '/customer-web/categories',
+      query: <String, dynamic>{
+        'lat': ?lat,
+        'lng': ?lng,
+        'radius_km': radiusKm,
+        'include_all': true,
+      },
+    );
+    return listFrom(raw, keys: const ['categories', 'items', 'data'])
+        .map(
+          (json) => HomeCategory(
+            key: readString(json, const ['key', 'category_key', 'slug']),
+            name: readString(json, const ['name', 'category_name', 'title']),
+            // `image_url` is a URL; `icon` is an icon *name*, not a URL, so the
+            // two must not be conflated or the tile tries to load "pizza".
+            imageUrl: readString(json, const ['image_url', 'imageUrl']),
+            icon: readString(json, const ['icon']),
+            itemCount: readInt(json, const ['item_count', 'itemCount']),
+          ),
+        )
+        .where(
+          (category) => category.name.isNotEmpty && category.key.isNotEmpty,
+        )
+        .toList(growable: false);
+  }
+
+  /// GET /customer-web/categories/:key/items — dishes within a category.
+  Future<List<CatalogItem>> fetchCategoryItems(
+    String categoryKey, {
+    double? lat,
+    double? lng,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    final raw = await _get(
+      '/customer-web/categories/${Uri.encodeComponent(categoryKey)}/items',
+      query: <String, dynamic>{
+        'lat': ?lat,
+        'lng': ?lng,
+        'page': page,
+        'limit': limit,
+      },
+    );
+    return listFrom(raw, keys: const ['items', 'results'])
+        .map((json) => _catalogItem(json))
+        .toList(growable: false);
+  }
+
   /// GET /customer-web/search — cross-restaurant search.
   Future<List<Restaurant>> searchRestaurants(String query) async {
     final raw = await _get(
@@ -196,6 +254,38 @@ class CatalogRepository {
       imageUrl: readString(json, const ['image_url', 'image']),
       type: CatalogItemType.food,
       isVeg: json['is_veg'] == true || json['is_vegetarian'] == true,
+      // Variants and addons must survive parsing: an order priced without them
+      // undercharges the customer and loses the kitchen's instructions.
+      variants: readList(json, 'variants')
+          .map(
+            (variant) => MenuVariant(
+              id: readString(variant, const ['id', 'variant_id']),
+              name: readString(variant, const ['name', 'variant_name']),
+              price: readDouble(variant, const ['price']).round(),
+              isAvailable: readBool(
+                variant,
+                const ['is_available', 'available'],
+                orElse: true,
+              ),
+            ),
+          )
+          .where((variant) => variant.id.isNotEmpty)
+          .toList(growable: false),
+      addons: readList(json, 'addons')
+          .map(
+            (addon) => MenuAddon(
+              id: readString(addon, const ['id', 'addon_id']),
+              name: readString(addon, const ['name', 'addon_name']),
+              price: readDouble(addon, const ['price']).round(),
+              isAvailable: readBool(
+                addon,
+                const ['is_available', 'available'],
+                orElse: true,
+              ),
+            ),
+          )
+          .where((addon) => addon.id.isNotEmpty)
+          .toList(growable: false),
     );
   }
 }
@@ -213,6 +303,27 @@ class MenuSection {
   final List<CatalogItem> items;
 }
 
+/// One entry in the home category rail.
+class HomeCategory {
+  const HomeCategory({
+    required this.key,
+    required this.name,
+    required this.imageUrl,
+    required this.icon,
+    required this.itemCount,
+  });
+
+  final String key;
+  final String name;
+
+  /// Artwork URL. May be empty — fall back to [icon].
+  final String imageUrl;
+
+  /// Icon *name* (not a URL), used when [imageUrl] is empty.
+  final String icon;
+  final int itemCount;
+}
+
 /// Payload of `GET /api/home`.
 class HomeFeed {
   const HomeFeed({required this.restaurants, required this.featuredItems});
@@ -226,9 +337,13 @@ class HomeFeed {
 // -----------------------------------------------------------------------
 
 String _readCuisine(Map<String, dynamic> json) {
-  final types = json['cuisine_types'];
-  if (types is List && types.isNotEmpty) {
-    return types.map((entry) => entry.toString()).join(', ');
+  // `/customer-web/search` returns `cuisines`; discovery returns
+  // `cuisine_types`. Both are arrays, so check each before the scalar keys.
+  for (final key in const ['cuisine_types', 'cuisines']) {
+    final types = json[key];
+    if (types is List && types.isNotEmpty) {
+      return types.map((entry) => entry.toString()).join(', ');
+    }
   }
   return readString(json, const ['cuisine', 'category', 'type']);
 }
@@ -236,7 +351,10 @@ String _readCuisine(Map<String, dynamic> json) {
 /// `estimated_delivery_time` arrives as text like "25-30 mins"; the UI model
 /// wants a single number, so the first integer in the string is used.
 int _readDeliveryMinutes(Map<String, dynamic> json) {
+  // `delivery_time_minutes` is what /customer-web/search returns; the others
+  // come from the discovery endpoints and may be text like "25-30 mins".
   for (final key in const [
+    'delivery_time_minutes',
     'estimated_delivery_time',
     'delivery_time',
     'delivery_minutes',

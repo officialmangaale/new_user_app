@@ -6,12 +6,13 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
-import '../../../shared/mock_data/mock_data.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../shared/repositories/catalog_repository.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../account/presentation/profile_screen.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../account/providers/engagement_providers.dart';
+import '../../catalog/presentation/add_to_cart.dart';
 import '../../catalog/providers/catalog_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 
@@ -118,6 +119,9 @@ class DeliveryHomeFeed extends ConsumerWidget {
                   hint: grocery
                       ? 'Search milk, fruits, snacks…'
                       : 'Search dishes or restaurants…',
+                  // Opens the dedicated search screen rather than editing in
+                  // place, so results have room and the query can be shared.
+                  onTap: () => context.push('/search'),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DeliveryModeSwitch(
@@ -273,7 +277,6 @@ class DeliveryHomeFeed extends ConsumerWidget {
             .where((item) => item.type == type)
             .toList();
     if (reversed) items = items.reversed.toList();
-    final cart = ref.watch(appControllerProvider.select((state) => state.cart));
     return SliverToBoxAdapter(
       child: SizedBox(
         height: 278,
@@ -288,11 +291,10 @@ class DeliveryHomeFeed extends ConsumerWidget {
             final item = items[index];
             return ProductCard(
               item: item,
-              quantity: cart[item.id] ?? 0,
-              onAdd: () =>
-                  ref.read(appControllerProvider.notifier).addItem(item),
+              quantity: ref.watch(appControllerProvider.select((state) => state.quantityForItem(item.id))),
+              onAdd: () => addItemToCart(context, ref, item),
               onRemove: () =>
-                  ref.read(appControllerProvider.notifier).removeItem(item.id),
+                  ref.read(appControllerProvider.notifier).removeItemById(item.id),
               onTap: () => context.push(
                 type == CatalogItemType.food
                     ? '/food-item/${item.id}'
@@ -353,23 +355,24 @@ class DeliveryHomeFeed extends ConsumerWidget {
   }
 }
 
-class _CategoryStrip extends StatefulWidget {
+class _CategoryStrip extends ConsumerStatefulWidget {
   const _CategoryStrip({required this.grocery});
 
   final bool grocery;
 
   @override
-  State<_CategoryStrip> createState() => _CategoryStripState();
+  ConsumerState<_CategoryStrip> createState() => _CategoryStripState();
 }
 
-class _CategoryStripState extends State<_CategoryStrip> {
-  int _selected = 0;
+class _CategoryStripState extends ConsumerState<_CategoryStrip> {
+  String? _selectedKey;
 
   @override
   Widget build(BuildContext context) {
-    final categories = widget.grocery
-        ? MockData.groceryCategories
-        : MockData.foodCategories;
+    final categories =
+        ref.watch(categoriesProvider).value ?? const <HomeCategory>[];
+    if (categories.isEmpty) return const SizedBox(height: 112);
+
     return SizedBox(
       height: 112,
       child: ListView.separated(
@@ -379,12 +382,19 @@ class _CategoryStripState extends State<_CategoryStrip> {
         scrollDirection: Axis.horizontal,
         itemCount: categories.length,
         separatorBuilder: (_, _) => const SizedBox(width: 5),
-        itemBuilder: (_, index) => PremiumCategoryTile(
-          label: categories[index].$1,
-          iconKey: categories[index].$2,
-          selected: index == _selected,
-          onTap: () => setState(() => _selected = index),
-        ),
+        itemBuilder: (_, index) {
+          final category = categories[index];
+          return PremiumCategoryTile(
+            label: category.name,
+            imageUrl: category.imageUrl,
+            iconKey: category.icon,
+            selected: category.key == _selectedKey,
+            onTap: () {
+              setState(() => _selectedKey = category.key);
+              context.push('/category/${Uri.encodeComponent(category.key)}');
+            },
+          );
+        },
       ),
     );
   }

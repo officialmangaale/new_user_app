@@ -175,7 +175,8 @@ class AppIconAction extends StatelessWidget {
 class PremiumCategoryTile extends StatelessWidget {
   const PremiumCategoryTile({
     required this.label,
-    required this.iconKey,
+    this.iconKey = '',
+    this.imageUrl = '',
     this.selected = false,
     this.onTap,
     super.key,
@@ -183,6 +184,10 @@ class PremiumCategoryTile extends StatelessWidget {
 
   final String label;
   final String iconKey;
+
+  /// Category artwork from the backend. Falls back to [iconKey] when empty or
+  /// when the image fails to load, so the rail never renders a blank tile.
+  final String imageUrl;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -216,13 +221,20 @@ class PremiumCategoryTile extends StatelessWidget {
                     color: selected ? AppColors.primary : AppColors.border,
                   ),
                 ),
-                child: Icon(
-                  categoryIcon(iconKey),
-                  size: 34,
-                  color: selected
-                      ? AppColors.primaryDark
-                      : AppColors.textPrimary,
-                ),
+                clipBehavior: Clip.antiAlias,
+                child: imageUrl.isEmpty
+                    ? Icon(
+                        categoryIcon(iconKey),
+                        size: 34,
+                        color: selected
+                            ? AppColors.primaryDark
+                            : AppColors.textPrimary,
+                      )
+                    : AppNetworkImage(
+                        url: imageUrl,
+                        fit: BoxFit.cover,
+                        semanticLabel: label,
+                      ),
               ),
               const SizedBox(height: 8),
               Text(

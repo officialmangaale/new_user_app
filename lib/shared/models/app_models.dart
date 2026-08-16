@@ -30,6 +30,39 @@ class Restaurant {
   final bool foodShare;
 }
 
+/// A selectable size/option on a menu item (for example Regular vs Large).
+///
+/// `price` is the absolute price of the item at this variant, matching how
+/// restaurant-service returns menu variants.
+class MenuVariant {
+  const MenuVariant({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.isAvailable = true,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final bool isAvailable;
+}
+
+/// An optional extra that can be added to a menu item.
+class MenuAddon {
+  const MenuAddon({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.isAvailable = true,
+  });
+
+  final String id;
+  final String name;
+  final int price;
+  final bool isAvailable;
+}
+
 class CatalogItem {
   const CatalogItem({
     required this.id,
@@ -42,6 +75,8 @@ class CatalogItem {
     required this.type,
     this.isVeg = true,
     this.sharedDiscount = 0,
+    this.variants = const [],
+    this.addons = const [],
   });
 
   final String id;
@@ -55,9 +90,50 @@ class CatalogItem {
   final bool isVeg;
   final int sharedDiscount;
 
+  /// Empty when the item has no size options.
+  final List<MenuVariant> variants;
+
+  /// Empty when the item takes no extras.
+  final List<MenuAddon> addons;
+
+  bool get needsCustomisation => variants.isNotEmpty || addons.isNotEmpty;
+
   int get discountPercent => originalPrice <= price
       ? 0
       : ((originalPrice - price) * 100 ~/ originalPrice);
+}
+
+/// One configured cart entry: an item plus the exact options chosen.
+///
+/// Two entries of the same item with different options are different lines, so
+/// the identity is [lineId] rather than the item id.
+class CartSelection {
+  const CartSelection({
+    required this.item,
+    this.variant,
+    this.addons = const [],
+  });
+
+  final CatalogItem item;
+  final MenuVariant? variant;
+  final List<MenuAddon> addons;
+
+  /// Stable, order-independent identity for this configuration.
+  String get lineId {
+    final addonIds = addons.map((addon) => addon.id).toList()..sort();
+    return [item.id, variant?.id ?? '', addonIds.join('+')].join('|');
+  }
+
+  /// Unit price: the variant replaces the base price, addons add on top.
+  int get unitPrice =>
+      (variant?.price ?? item.price) +
+      addons.fold(0, (sum, addon) => sum + addon.price);
+
+  /// Human-readable option summary, e.g. "Large • Extra cheese".
+  String get optionsLabel => [
+    if (variant != null) variant!.name,
+    ...addons.map((addon) => addon.name),
+  ].join(' • ');
 }
 
 class SharedGroup {
@@ -145,9 +221,16 @@ class AppNotificationItem {
 }
 
 class CartLine {
-  const CartLine({required this.item, required this.quantity});
+  const CartLine({required this.selection, required this.quantity});
 
-  final CatalogItem item;
+  final CartSelection selection;
   final int quantity;
-  int get total => item.price * quantity;
+
+  CatalogItem get item => selection.item;
+  MenuVariant? get variant => selection.variant;
+  List<MenuAddon> get addons => selection.addons;
+  String get lineId => selection.lineId;
+  String get optionsLabel => selection.optionsLabel;
+
+  int get total => selection.unitPrice * quantity;
 }

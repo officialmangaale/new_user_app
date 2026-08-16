@@ -12,6 +12,7 @@ import '../../../shared/widgets/delivery_cards.dart';
 import '../../../shared/repositories/catalog_repository.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../providers/catalog_providers.dart';
+import 'add_to_cart.dart';
 
 class RestaurantDetailsScreen extends ConsumerStatefulWidget {
   const RestaurantDetailsScreen({required this.restaurantId, super.key});
@@ -58,7 +59,6 @@ class _RestaurantDetailsScreenState
               item.name.toLowerCase().contains(_query.toLowerCase()),
         )
         .toList();
-    final cart = ref.watch(appControllerProvider.select((state) => state.cart));
     return DefaultTabController(
       length: 5,
       child: Scaffold(
@@ -234,14 +234,17 @@ class _RestaurantDetailsScreenState
                     final item = items[index];
                     return _MenuItemTile(
                       item: item,
-                      quantity: cart[item.id] ?? 0,
+                      quantity: ref.watch(appControllerProvider.select((state) => state.quantityForItem(item.id))),
                       onTap: () => context.push('/food-item/${item.id}'),
-                      onAdd: () => ref
-                          .read(appControllerProvider.notifier)
-                          .addItem(item, restaurantId: widget.restaurantId),
+                      onAdd: () => addItemToCart(
+                        context,
+                        ref,
+                        item,
+                        restaurantId: widget.restaurantId,
+                      ),
                       onRemove: () => ref
                           .read(appControllerProvider.notifier)
-                          .removeItem(item.id),
+                          .removeItemById(item.id),
                     );
                   },
                 ),
@@ -438,7 +441,7 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
   Widget build(BuildContext context) {
     final item = MockData.itemById(widget.itemId);
     final quantity = ref.watch(
-      appControllerProvider.select((state) => state.cart[item.id] ?? 0),
+      appControllerProvider.select((state) => state.quantityForItem(item.id)),
     );
     return Scaffold(
       body: CustomScrollView(
@@ -582,11 +585,10 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
             children: [
               QuantityControl(
                 quantity: quantity,
-                onAdd: () =>
-                    ref.read(appControllerProvider.notifier).addItem(item),
+                onAdd: () => addItemToCart(context, ref, item),
                 onRemove: () => ref
                     .read(appControllerProvider.notifier)
-                    .removeItem(item.id),
+                    .removeItemById(item.id),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -595,9 +597,12 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
                       ? 'Add to cart • ₹${item.price}'
                       : 'View cart • ₹${ref.watch(cartTotalProvider)}',
                   onPressed: quantity == 0
-                      ? () => ref
-                            .read(appControllerProvider.notifier)
-                            .addItem(item)
+                      ? () => addItemToCart(
+                          context,
+                          ref,
+                          item,
+                          forceCustomise: true,
+                        )
                       : () => context.push('/cart'),
                 ),
               ),
@@ -627,7 +632,7 @@ class _GroceryProductDetailsScreenState
   Widget build(BuildContext context) {
     final item = MockData.itemById(widget.itemId);
     final quantity = ref.watch(
-      appControllerProvider.select((state) => state.cart[item.id] ?? 0),
+      appControllerProvider.select((state) => state.quantityForItem(item.id)),
     );
     return Scaffold(
       appBar: AppBar(
@@ -791,11 +796,10 @@ class _GroceryProductDetailsScreenState
             children: [
               QuantityControl(
                 quantity: quantity,
-                onAdd: () =>
-                    ref.read(appControllerProvider.notifier).addItem(item),
+                onAdd: () => addItemToCart(context, ref, item),
                 onRemove: () => ref
                     .read(appControllerProvider.notifier)
-                    .removeItem(item.id),
+                    .removeItemById(item.id),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -804,9 +808,12 @@ class _GroceryProductDetailsScreenState
                       ? 'Add to basket • ₹${item.price}'
                       : 'View basket • ₹${ref.watch(cartTotalProvider)}',
                   onPressed: quantity == 0
-                      ? () => ref
-                            .read(appControllerProvider.notifier)
-                            .addItem(item)
+                      ? () => addItemToCart(
+                          context,
+                          ref,
+                          item,
+                          forceCustomise: true,
+                        )
                       : () => context.push('/cart'),
                 ),
               ),

@@ -26,12 +26,12 @@ class AppState {
   final Map<String, int> foodCart;
   final Map<String, int> groceryCart;
 
-  /// Items the customer has actually added, keyed by id.
+  /// Configurations the customer has added, keyed by [CartSelection.lineId].
   ///
-  /// Menu items now arrive from restaurant-service per screen, so there is no
-  /// global catalog to look an id up in the way `MockData.itemById` allowed.
-  /// The cart therefore remembers the item it was given.
-  final Map<String, CatalogItem> knownItems;
+  /// Menu items arrive per screen from restaurant-service, so there is no
+  /// global catalog to look an id up in. Keying by configuration rather than
+  /// item id is what lets "Large + extra cheese" and "Regular" coexist.
+  final Map<String, CartSelection> knownItems;
 
   /// Restaurant the current cart belongs to. Required by order placement.
   final String cartRestaurantId;
@@ -41,13 +41,25 @@ class AppState {
   Map<String, int> get cart =>
       mode == DeliveryMode.food ? foodCart : groceryCart;
 
+  /// Total quantity of an item across every configuration of it, so a menu row
+  /// shows "2" when the customer added a Regular and a Large.
+  ///
+  /// Pure so it is safe to call inside a Riverpod `select`.
+  int quantityForItem(String itemId) {
+    var total = 0;
+    cart.forEach((lineId, quantity) {
+      if (knownItems[lineId]?.item.id == itemId) total += quantity;
+    });
+    return total;
+  }
+
   AppState copyWith({
     DeliveryMode? mode,
     bool? authenticated,
     bool? sessionLoaded,
     Map<String, int>? foodCart,
     Map<String, int>? groceryCart,
-    Map<String, CatalogItem>? knownItems,
+    Map<String, CartSelection>? knownItems,
     String? cartRestaurantId,
     Set<String>? joinedGroupIds,
     int? activeHomeTab,
@@ -122,38 +134,62 @@ class AppController extends Notifier<AppState> {
     state = state.copyWith(authenticated: false);
   }
 
-  /// Adds one unit of [item], remembering the item so the cart can render it
-  /// without a global catalog lookup.
+  /// Adds one unit of [item] with no options chosen.
+  ///
+  /// Only correct for items with no variants or addons — callers must route
+  /// customisable items through the customise sheet and use [addSelection], or
+  /// the customer's choices are silently dropped. See [addOrRepeat].
+  void addItem(CatalogItem item, {String? restaurantId}) {
+    addSelection(CartSelection(item: item), restaurantId: restaurantId);
+  }
+
+  /// Repeats the most recent configuration of [itemId] if one exists.
+  ///
+  /// Lets the "+" on a menu row increment an already-customised line instead of
+  /// reopening the sheet. Returns false when the item is not in the cart yet.
+  bool addOrRepeat(String itemId, {String? restaurantId}) {
+    CartSelection? latest;
+    for (final lineId in state.cart.keys) {
+      final selection = state.knownItems[lineId];
+      if (selection?.item.id == itemId) latest = selection;
+    }
+    if (latest == null) return false;
+    addSelection(latest, restaurantId: restaurantId);
+    return true;
+  }
+
+  /// Adds one unit of a fully configured [selection].
   ///
   /// [restaurantId] is recorded because order placement requires it and a
   /// [CatalogItem] only carries the store's display name.
-  void addItem(CatalogItem item, {String? restaurantId}) {
-    final food = item.type == CatalogItemType.food;
+  void addSelection(CartSelection selection, {String? restaurantId}) {
+    final food = selection.item.type == CatalogItemType.food;
+    final lineId = selection.lineId;
     final next = Map<String, int>.from(
       food ? state.foodCart : state.groceryCart,
     );
-    next[item.id] = (next[item.id] ?? 0) + 1;
+    next[lineId] = (next[lineId] ?? 0) + 1;
     state = state.copyWith(
       mode: food ? DeliveryMode.food : DeliveryMode.grocery,
       foodCart: food ? next : null,
       groceryCart: food ? null : next,
-      knownItems: {...state.knownItems, item.id: item},
+      knownItems: {...state.knownItems, lineId: selection},
       cartRestaurantId: (restaurantId != null && restaurantId.isNotEmpty)
           ? restaurantId
           : null,
     );
   }
 
-  void removeItem(String itemId) {
-    final food = _isFood(itemId);
+  void removeItem(String lineId) {
+    final food = _isFood(lineId);
     final next = Map<String, int>.from(
       food ? state.foodCart : state.groceryCart,
     );
-    final quantity = next[itemId] ?? 0;
+    final quantity = next[lineId] ?? 0;
     if (quantity <= 1) {
-      next.remove(itemId);
+      next.remove(lineId);
     } else {
-      next[itemId] = quantity - 1;
+      next[lineId] = quantity - 1;
     }
     state = state.copyWith(
       mode: food ? DeliveryMode.food : DeliveryMode.grocery,
@@ -162,11 +198,11 @@ class AppController extends Notifier<AppState> {
     );
   }
 
-  void removeLine(String itemId) {
-    final food = _isFood(itemId);
+  void removeLine(String lineId) {
+    final food = _isFood(lineId);
     final next = Map<String, int>.from(
       food ? state.foodCart : state.groceryCart,
-    )..remove(itemId);
+    )..remove(lineId);
     state = state.copyWith(
       mode: food ? DeliveryMode.food : DeliveryMode.grocery,
       foodCart: food ? next : null,
@@ -174,13 +210,27 @@ class AppController extends Notifier<AppState> {
     );
   }
 
-  /// Which basket an id belongs to. Falls back to the active mode when the
-  /// item is not remembered, which keeps removal safe after a restart.
-  bool _isFood(String itemId) {
-    final item = state.knownItems[itemId];
-    if (item != null) return item.type == CatalogItemType.food;
-    if (state.foodCart.containsKey(itemId)) return true;
-    if (state.groceryCart.containsKey(itemId)) return false;
+  /// Removes one unit of [itemId] from the most recently added configuration.
+  ///
+  /// Menu rows only know the item, not which configuration to decrement, so the
+  /// newest matching line is used.
+  void removeItemById(String itemId) {
+    String? target;
+    for (final lineId in state.cart.keys) {
+      if (state.knownItems[lineId]?.item.id == itemId) target = lineId;
+    }
+    if (target != null) removeItem(target);
+  }
+
+  /// Which basket a line belongs to. Falls back to the active mode when the
+  /// line is not remembered, which keeps removal safe after a restart.
+  bool _isFood(String lineId) {
+    final selection = state.knownItems[lineId];
+    if (selection != null) {
+      return selection.item.type == CatalogItemType.food;
+    }
+    if (state.foodCart.containsKey(lineId)) return true;
+    if (state.groceryCart.containsKey(lineId)) return false;
     return state.mode == DeliveryMode.food;
   }
 
@@ -203,10 +253,10 @@ final cartLinesProvider = Provider<List<CartLine>>((ref) {
   final state = ref.watch(appControllerProvider);
   return state.cart.entries
       .map((entry) {
-        final item = state.knownItems[entry.key];
-        return item == null
+        final selection = state.knownItems[entry.key];
+        return selection == null
             ? null
-            : CartLine(item: item, quantity: entry.value);
+            : CartLine(selection: selection, quantity: entry.value);
       })
       .whereType<CartLine>()
       .toList(growable: false);

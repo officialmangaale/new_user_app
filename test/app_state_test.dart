@@ -25,9 +25,11 @@ void main() {
 
     controller.setMode(DeliveryMode.food);
     expect(container.read(cartCountProvider), 2);
-    controller.removeItem('f1');
+    // The cart is keyed by configuration now, so removal goes through the
+    // item-level helper or the line's own id.
+    controller.removeItemById('f1');
     expect(container.read(cartCountProvider), 1);
-    controller.removeLine('f1');
+    controller.removeLine(container.read(cartLinesProvider).single.lineId);
     expect(container.read(cartCountProvider), 0);
 
     controller.joinGroup('s1');

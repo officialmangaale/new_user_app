@@ -30,14 +30,7 @@ class OrdersRepository {
   }) async {
     final data = await _post('/customer-web/cart/validate', <String, dynamic>{
       'restaurant_id': _asIntOrString(restaurantId),
-      'items': lines
-          .map(
-            (line) => <String, dynamic>{
-              'item_id': _asIntOrString(line.item.id),
-              'quantity': line.quantity,
-            },
-          )
-          .toList(growable: false),
+      'items': lines.map(_linePayload).toList(growable: false),
       'coupon_code': ?couponCode,
     });
     return BillSummary.fromJson(data);
@@ -372,6 +365,29 @@ class OrderTracking {
   final int etaMinutes;
   final String riderName;
   final String riderPhone;
+}
+
+/// Cart line as restaurant-service expects it.
+///
+/// Matches the production web client's `CartValidateRequestItem`
+/// (`src/types/cart.ts`): item, quantity, optional variant, and addon
+/// quantities. Omitting these would price the order at base cost and drop the
+/// customer's choices before they reach the kitchen.
+Map<String, dynamic> _linePayload(CartLine line) {
+  return <String, dynamic>{
+    'item_id': _asIntOrString(line.item.id),
+    'quantity': line.quantity,
+    'variant_id': ?_asIntOrStringOrNull(line.variant?.id),
+    if (line.addons.isNotEmpty)
+      'addons': line.addons
+          .map(
+            (addon) => <String, dynamic>{
+              'addon_id': _asIntOrString(addon.id),
+              'quantity': 1,
+            },
+          )
+          .toList(growable: false),
+  };
 }
 
 /// restaurant-service uses numeric ids; send a number when the value is

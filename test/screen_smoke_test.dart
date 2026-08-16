@@ -11,13 +11,38 @@ import 'package:turquoise_delivery/features/notifications/presentation/notificat
 import 'package:turquoise_delivery/features/orders/presentation/orders_screen.dart';
 import 'package:turquoise_delivery/features/shared_orders/presentation/shared_order_screens.dart';
 import 'package:turquoise_delivery/features/tracking/presentation/tracking_screen.dart';
+import 'package:turquoise_delivery/features/account/providers/engagement_providers.dart';
+import 'package:turquoise_delivery/features/app_state/providers/location_providers.dart';
 import 'package:turquoise_delivery/features/catalog/providers/catalog_providers.dart';
+import 'package:turquoise_delivery/features/orders/providers/orders_providers.dart';
 import 'package:turquoise_delivery/shared/mock_data/mock_data.dart';
 import 'package:turquoise_delivery/shared/repositories/catalog_repository.dart';
 import 'package:turquoise_delivery/shared/models/app_models.dart';
 import 'package:turquoise_delivery/shared/widgets/delivery_cards.dart';
 import 'package:turquoise_delivery/features/app_state/providers/app_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// These screens now fetch over HTTP and read the device location. The smoke
+/// test is about layout, so every remote source is stubbed — otherwise the test
+/// hits the network and leaves request timers pending after disposal.
+final _offlineOverrides = [
+  currentLocationProvider.overrideWith((ref) async => null),
+  homeFeedProvider.overrideWith(
+    (ref) async =>
+        const HomeFeed(restaurants: [], featuredItems: []),
+  ),
+  restaurantsProvider.overrideWith((ref) async => const <Restaurant>[]),
+  sharedGroupsProvider(
+    DeliveryMode.food,
+  ).overrideWith((ref) async => const <SharedGroup>[]),
+  sharedGroupsProvider(
+    DeliveryMode.grocery,
+  ).overrideWith((ref) async => const <SharedGroup>[]),
+  ordersProvider.overrideWith((ref) async => const <DeliveryOrder>[]),
+  notificationsProvider.overrideWith(
+    (ref) async => const <AppNotificationItem>[],
+  ),
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +72,7 @@ void main() {
     for (final screen in screens) {
       await tester.pumpWidget(
         ProviderScope(
+          overrides: _offlineOverrides,
           child: MaterialApp(theme: AppTheme.light, home: screen),
         ),
       );

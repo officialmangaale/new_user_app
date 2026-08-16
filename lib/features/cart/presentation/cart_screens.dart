@@ -52,20 +52,18 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
     final grocery = lines.first.item.type == CatalogItemType.grocery;
     final total = ref.watch(cartTotalProvider);
-    final savings = _shared ? (total * (grocery ? 0.08 : 0.1)).round() : 0;
-    const taxes = 21;
-    const platformFee = 6;
-    final packagingFee = grocery ? 4 : 9;
-    final deliveryFee = _shared ? 12 : 29;
-    final couponDiscount = _couponApplied ? 50 : 0;
-    final payable =
-        total +
-        taxes +
-        platformFee +
-        packagingFee +
-        deliveryFee -
-        savings -
-        couponDiscount;
+
+    // Every figure below comes from /customer-web/cart/validate. The app must
+    // not invent tax, delivery or packaging amounts — the customer has to see
+    // exactly what the backend will charge.
+    final bill = ref.watch(cartBillProvider).value;
+    final taxes = (bill?.taxAmount ?? 0).round();
+    final platformFee = bill?.platformFee ?? 0;
+    final packagingFee = bill?.packagingCharge ?? 0;
+    final deliveryFee = bill?.deliveryFee ?? 0;
+    final couponDiscount = bill?.discount ?? 0;
+    final savings = couponDiscount;
+    final payable = bill?.grandTotal ?? total;
     return Scaffold(
       appBar: AppBar(
         title: Text(grocery ? 'Your grocery basket' : 'Your food cart'),
@@ -351,7 +349,7 @@ class _CartLineTile extends ConsumerWidget {
                   .addItem(line.item),
               onRemove: () => ref
                   .read(appControllerProvider.notifier)
-                  .removeItem(line.item.id),
+                  .removeItem(line.lineId),
             ),
             const SizedBox(height: 5),
             Text(
@@ -363,7 +361,7 @@ class _CartLineTile extends ConsumerWidget {
               child: TextButton(
                 onPressed: () => ref
                     .read(appControllerProvider.notifier)
-                    .removeLine(line.item.id),
+                    .removeLine(line.lineId),
                 child: const Text('Remove'),
               ),
             ),

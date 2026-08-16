@@ -7,6 +7,8 @@ import '../../features/account/presentation/wallet_referral_screens.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
 import '../../features/cart/presentation/cart_screens.dart';
 import '../../features/catalog/presentation/catalog_detail_screens.dart';
+import '../../features/catalog/presentation/category_items_screen.dart';
+import '../../features/catalog/presentation/search_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/orders/presentation/orders_screen.dart';
@@ -76,6 +78,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/product/:id',
         builder: (_, state) =>
             GroceryProductDetailsScreen(itemId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (_, state) =>
+            SearchScreen(initialQuery: state.uri.queryParameters['q'] ?? ''),
+      ),
+      GoRoute(
+        path: '/category/:key',
+        builder: (_, state) => CategoryItemsScreen(
+          categoryKey: Uri.decodeComponent(state.pathParameters['key']!),
+          title: state.uri.queryParameters['title'] ?? '',
+        ),
       ),
       GoRoute(path: '/cart', builder: (_, _) => const CartScreen()),
       GoRoute(

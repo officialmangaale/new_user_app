@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Coarse/fine location scope restaurant discovery and delivery pricing.
+         Location is optional: the app falls back to non-located browsing when
+         permission is denied. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
     <application
         android:label="Turquoise Delivery"
         android:name="${applicationName}"
