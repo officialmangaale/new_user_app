@@ -11,6 +11,7 @@ import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../account/presentation/profile_screen.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../catalog/providers/catalog_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 
 class HomeShellScreen extends ConsumerWidget {
@@ -180,15 +181,17 @@ class DeliveryHomeFeed extends ConsumerWidget {
   }
 
   List<Widget> _foodSections(BuildContext context, WidgetRef ref) {
+    // Strips render empty while the request is in flight rather than pushing a
+    // skeleton into every carousel; the pull-to-refresh above covers retry.
+    final restaurants =
+        ref.watch(restaurantsProvider).value ?? const <Restaurant>[];
     return [
       _sliverHeader(
         context,
         'Popular near you',
         'Loved around your neighbourhood',
       ),
-      SliverToBoxAdapter(
-        child: _RestaurantStrip(restaurants: MockData.restaurants),
-      ),
+      SliverToBoxAdapter(child: _RestaurantStrip(restaurants: restaurants)),
       _gap(),
       _sliverHeader(context, 'Recommended for you', 'Picked for your evening'),
       _productStrip(ref, CatalogItemType.food),
@@ -199,7 +202,7 @@ class DeliveryHomeFeed extends ConsumerWidget {
       _sliverHeader(context, 'Under 30 minutes', 'Fast local favourites'),
       SliverToBoxAdapter(
         child: _RestaurantStrip(
-          restaurants: MockData.restaurants.reversed.toList(),
+          restaurants: restaurants.reversed.toList(growable: false),
         ),
       ),
       _gap(),
@@ -211,9 +214,7 @@ class DeliveryHomeFeed extends ConsumerWidget {
         'Offers up to 40% off',
         'Big flavour, lighter bill',
       ),
-      SliverToBoxAdapter(
-        child: _RestaurantStrip(restaurants: MockData.restaurants),
-      ),
+      SliverToBoxAdapter(child: _RestaurantStrip(restaurants: restaurants)),
     ];
   }
 
@@ -265,7 +266,11 @@ class DeliveryHomeFeed extends ConsumerWidget {
     CatalogItemType type, {
     bool reversed = false,
   }) {
-    var items = MockData.catalog.where((item) => item.type == type).toList();
+    var items =
+        (ref.watch(homeFeedProvider).value?.featuredItems ??
+                const <CatalogItem>[])
+            .where((item) => item.type == type)
+            .toList();
     if (reversed) items = items.reversed.toList();
     final cart = ref.watch(appControllerProvider.select((state) => state.cart));
     return SliverToBoxAdapter(
