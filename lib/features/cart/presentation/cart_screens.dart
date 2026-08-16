@@ -345,7 +345,7 @@ class _CartLineTile extends ConsumerWidget {
               compact: true,
               onAdd: () => ref
                   .read(appControllerProvider.notifier)
-                  .addItem(line.item.id),
+                  .addItem(line.item),
               onRemove: () => ref
                   .read(appControllerProvider.notifier)
                   .removeItem(line.item.id),

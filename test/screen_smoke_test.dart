@@ -11,6 +11,7 @@ import 'package:turquoise_delivery/features/notifications/presentation/notificat
 import 'package:turquoise_delivery/features/orders/presentation/orders_screen.dart';
 import 'package:turquoise_delivery/features/shared_orders/presentation/shared_order_screens.dart';
 import 'package:turquoise_delivery/features/tracking/presentation/tracking_screen.dart';
+import 'package:turquoise_delivery/shared/mock_data/mock_data.dart';
 import 'package:turquoise_delivery/shared/models/app_models.dart';
 import 'package:turquoise_delivery/shared/widgets/delivery_cards.dart';
 import 'package:turquoise_delivery/features/app_state/providers/app_controller.dart';
@@ -67,7 +68,9 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    container.read(appControllerProvider.notifier).addItem('f1');
+    container
+        .read(appControllerProvider.notifier)
+        .addItem(MockData.itemById('f1'));
 
     await tester.pumpWidget(
       UncontrolledProviderScope(

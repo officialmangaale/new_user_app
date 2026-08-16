@@ -8,8 +8,10 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
+import '../../../core/services/api_exception.dart';
 import '../../../shared/models/app_models.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../providers/auth_providers.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -209,22 +211,50 @@ class _BrandMark extends StatelessWidget {
   }
 }
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({this.returnTo, super.key});
 
   final String? returnTo;
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _controller = TextEditingController();
+  bool _sending = false;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Requests an OTP from user-service, then hands the phone number to the
+  /// verify screen. Navigation only happens once the backend has accepted.
+  Future<void> _sendOtp() async {
+    final phone = _controller.text.replaceAll(' ', '');
+    setState(() => _sending = true);
+    try {
+      await ref.read(authRepositoryProvider).sendOtp(phone);
+      if (!mounted) return;
+      context.push(
+        Uri(
+          path: '/otp',
+          queryParameters: {
+            'returnTo': widget.returnTo ?? '/setup',
+            'phone': phone,
+          },
+        ).toString(),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
@@ -279,17 +309,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const Spacer(),
               AppButton(
-                label: 'Send OTP',
-                onPressed: valid
-                    ? () => context.push(
-                        Uri(
-                          path: '/otp',
-                          queryParameters: {
-                            'returnTo': widget.returnTo ?? '/setup',
-                          },
-                        ).toString(),
-                      )
-                    : null,
+                label: _sending ? 'Sending OTP…' : 'Send OTP',
+                onPressed: (valid && !_sending) ? _sendOtp : null,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -343,9 +364,12 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class OtpScreen extends ConsumerStatefulWidget {
-  const OtpScreen({required this.returnTo, super.key});
+  const OtpScreen({required this.returnTo, this.phone = '', super.key});
 
   final String returnTo;
+
+  /// Number the OTP was sent to, forwarded by [LoginScreen].
+  final String phone;
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
@@ -358,6 +382,48 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   );
   int _seconds = 30;
   Timer? _timer;
+  bool _verifying = false;
+
+  String get _code => _controllers.map((c) => c.text).join();
+
+  /// Verifies the code against user-service and persists the returned session.
+  /// The screen only advances after the backend has issued a token.
+  Future<void> _verify() async {
+    setState(() => _verifying = true);
+    try {
+      final session = await ref
+          .read(authRepositoryProvider)
+          .verifyOtp(phone: widget.phone, otp: _code);
+      await ref.read(appControllerProvider.notifier).completeLogin(session);
+      if (!mounted) return;
+      // A returning customer should not be pushed back through onboarding.
+      final destination = (!session.user.isNewUser && widget.returnTo == '/setup')
+          ? '/home'
+          : widget.returnTo;
+      context.go(destination);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  /// Requests a fresh code, then restarts the countdown.
+  Future<void> _resend() async {
+    try {
+      await ref.read(authRepositoryProvider).sendOtp(widget.phone);
+      if (!mounted) return;
+      setState(_startTimer);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
 
   @override
   void initState() {
@@ -404,8 +470,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: AppSpacing.xs),
-              const Text(
-                'Enter the 6-digit code sent to +91 ••••• 43210. Use any code for this demo.',
+              Text(
+                widget.phone.isEmpty
+                    ? 'Enter the 6-digit code we just sent you.'
+                    : 'Enter the 6-digit code sent to +91 ${widget.phone}.',
               ),
               const SizedBox(height: AppSpacing.xl),
               Row(
@@ -440,21 +508,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         'Resend code in 00:${_seconds.toString().padLeft(2, '0')}',
                       )
                     : TextButton(
-                        onPressed: () => setState(_startTimer),
+                        onPressed: _resend,
                         child: const Text('Resend code'),
                       ),
               ),
               const Spacer(),
               AppButton(
-                label: 'Verify & continue',
-                onPressed: complete
-                    ? () async {
-                        await ref
-                            .read(appControllerProvider.notifier)
-                            .authenticate();
-                        if (context.mounted) context.go(widget.returnTo);
-                      }
-                    : null,
+                label: _verifying ? 'Verifying…' : 'Verify & continue',
+                onPressed: (complete && !_verifying) ? _verify : null,
               ),
             ],
           ),

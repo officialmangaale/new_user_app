@@ -30,6 +30,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/otp',
         builder: (_, state) => OtpScreen(
           returnTo: state.uri.queryParameters['returnTo'] ?? '/setup',
+          phone: state.uri.queryParameters['phone'] ?? '',
         ),
       ),
       GoRoute(path: '/setup', builder: (_, _) => const ProfileSetupScreen()),

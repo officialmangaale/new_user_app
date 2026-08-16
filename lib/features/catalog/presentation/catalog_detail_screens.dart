@@ -219,7 +219,7 @@ class _RestaurantDetailsScreenState
                       onTap: () => context.push('/food-item/${item.id}'),
                       onAdd: () => ref
                           .read(appControllerProvider.notifier)
-                          .addItem(item.id),
+                          .addItem(item),
                       onRemove: () => ref
                           .read(appControllerProvider.notifier)
                           .removeItem(item.id),
@@ -564,7 +564,7 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
               QuantityControl(
                 quantity: quantity,
                 onAdd: () =>
-                    ref.read(appControllerProvider.notifier).addItem(item.id),
+                    ref.read(appControllerProvider.notifier).addItem(item),
                 onRemove: () => ref
                     .read(appControllerProvider.notifier)
                     .removeItem(item.id),
@@ -578,7 +578,7 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
                   onPressed: quantity == 0
                       ? () => ref
                             .read(appControllerProvider.notifier)
-                            .addItem(item.id)
+                            .addItem(item)
                       : () => context.push('/cart'),
                 ),
               ),
@@ -773,7 +773,7 @@ class _GroceryProductDetailsScreenState
               QuantityControl(
                 quantity: quantity,
                 onAdd: () =>
-                    ref.read(appControllerProvider.notifier).addItem(item.id),
+                    ref.read(appControllerProvider.notifier).addItem(item),
                 onRemove: () => ref
                     .read(appControllerProvider.notifier)
                     .removeItem(item.id),
@@ -787,7 +787,7 @@ class _GroceryProductDetailsScreenState
                   onPressed: quantity == 0
                       ? () => ref
                             .read(appControllerProvider.notifier)
-                            .addItem(item.id)
+                            .addItem(item)
                       : () => context.push('/cart'),
                 ),
               ),

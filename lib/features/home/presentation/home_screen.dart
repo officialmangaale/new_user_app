@@ -284,7 +284,7 @@ class DeliveryHomeFeed extends ConsumerWidget {
               item: item,
               quantity: cart[item.id] ?? 0,
               onAdd: () =>
-                  ref.read(appControllerProvider.notifier).addItem(item.id),
+                  ref.read(appControllerProvider.notifier).addItem(item),
               onRemove: () =>
                   ref.read(appControllerProvider.notifier).removeItem(item.id),
               onTap: () => context.push(
