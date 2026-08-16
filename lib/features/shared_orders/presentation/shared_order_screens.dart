@@ -7,12 +7,30 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
-import '../../../shared/mock_data/mock_data.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../../shared/widgets/shared_order_status.dart';
+import '../../account/providers/engagement_providers.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../authentication/presentation/auth_screens.dart';
+
+/// Placeholder rendered while a group request is in flight, so the layout has
+/// something to lay out against without inventing plausible-looking numbers.
+SharedGroup _emptyGroup(String groupId) => SharedGroup(
+  id: groupId,
+  title: '',
+  subtitle: '',
+  participants: 0,
+  requiredParticipants: 0,
+  distanceKm: 0,
+  minutesLeft: 0,
+  currentDiscount: 0,
+  maximumDiscount: 0,
+  deliveryDiscount: 0,
+  savings: 0,
+  imageUrl: '',
+  mode: DeliveryMode.food,
+);
 
 Future<void> handleJoinGroup(
   BuildContext context,
@@ -65,9 +83,10 @@ class _SharedOrderListingScreenState
   @override
   Widget build(BuildContext context) {
     final food = widget.mode == DeliveryMode.food;
-    final groups = MockData.groups
-        .where((group) => group.mode == widget.mode)
-        .toList();
+    // Server already filters by mode; the list renders empty while loading.
+    final groups =
+        ref.watch(sharedGroupsProvider(widget.mode)).value ??
+        const <SharedGroup>[];
     final state = ref.watch(appControllerProvider);
     final body = CustomScrollView(
       slivers: [
@@ -206,12 +225,16 @@ class SharedOrderDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final group = MockData.groupById(groupId);
-    final joined = ref.watch(
+    final detail = ref.watch(sharedGroupProvider(groupId)).value;
+    final group = detail?.group ?? _emptyGroup(groupId);
+    // Membership is whatever the server says; the local set is only an
+    // optimistic echo for the session.
+    final bool locallyJoined = ref.watch(
       appControllerProvider.select(
-        (state) => state.joinedGroupIds.contains(group.id),
+        (state) => state.joinedGroupIds.contains(groupId),
       ),
     );
+    final bool joined = detail?.joined ?? locallyJoined;
     final grocery = group.mode == DeliveryMode.grocery;
     return Scaffold(
       body: CustomScrollView(
@@ -693,21 +716,23 @@ class _CreateSharedOrderScreenState
   }
 }
 
-class WaitingRoomScreen extends StatefulWidget {
+class WaitingRoomScreen extends ConsumerStatefulWidget {
   const WaitingRoomScreen({required this.groupId, super.key});
 
   final String groupId;
 
   @override
-  State<WaitingRoomScreen> createState() => _WaitingRoomScreenState();
+  ConsumerState<WaitingRoomScreen> createState() => _WaitingRoomScreenState();
 }
 
-class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
+class _WaitingRoomScreenState extends ConsumerState<WaitingRoomScreen> {
   bool _approved = false;
 
   @override
   Widget build(BuildContext context) {
-    final group = MockData.groupById(widget.groupId);
+    final group =
+        ref.watch(sharedGroupProvider(widget.groupId)).value?.group ??
+        _emptyGroup(widget.groupId);
     final grocery = group.mode == DeliveryMode.grocery;
     return Scaffold(
       appBar: AppBar(
@@ -860,14 +885,16 @@ class _WaitingRoomScreenState extends State<WaitingRoomScreen> {
   }
 }
 
-class InviteFriendsScreen extends StatelessWidget {
+class InviteFriendsScreen extends ConsumerWidget {
   const InviteFriendsScreen({required this.groupId, super.key});
 
   final String groupId;
 
   @override
-  Widget build(BuildContext context) {
-    final group = MockData.groupById(groupId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final group =
+        ref.watch(sharedGroupProvider(groupId)).value?.group ??
+        _emptyGroup(groupId);
     return Scaffold(
       appBar: AppBar(title: const Text('Invite friends')),
       body: Padding(

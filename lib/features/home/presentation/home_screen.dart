@@ -11,6 +11,7 @@ import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../account/presentation/profile_screen.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../account/providers/engagement_providers.dart';
 import '../../catalog/providers/catalog_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 
@@ -396,9 +397,8 @@ class _HomeGroupStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = MockData.groups
-        .where((group) => group.mode == mode)
-        .toList();
+    final groups =
+        ref.watch(sharedGroupsProvider(mode)).value ?? const <SharedGroup>[];
     final state = ref.watch(appControllerProvider);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     return SizedBox(
