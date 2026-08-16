@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
-import '../../../shared/mock_data/mock_data.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
+import '../providers/orders_providers.dart';
 
 class OrdersScreen extends StatelessWidget {
   const OrdersScreen({super.key});
@@ -37,18 +39,21 @@ class OrdersScreen extends StatelessWidget {
   }
 }
 
-class _OrdersList extends StatelessWidget {
+class _OrdersList extends ConsumerWidget {
   const _OrdersList({required this.status});
 
   final OrderStatus status;
 
   @override
-  Widget build(BuildContext context) {
-    final orders = MockData.orders
-        .where((order) => order.status == status)
-        .toList();
-    if (orders.isEmpty) {
-      return EmptyState(
+  Widget build(BuildContext context, WidgetRef ref) {
+    // One history fetch backs all three tabs; the backend returns every order
+    // and the tab filters locally, so switching tabs costs no extra request.
+    final orders = ref.watch(ordersProvider);
+    return AsyncView<List<DeliveryOrder>>(
+      value: orders,
+      onRetry: () => ref.invalidate(ordersProvider),
+      isEmpty: (all) => all.where((o) => o.status == status).isEmpty,
+      empty: EmptyState(
         icon: status == OrderStatus.active
             ? Icons.delivery_dining_outlined
             : Icons.receipt_long_outlined,
@@ -56,13 +61,21 @@ class _OrdersList extends StatelessWidget {
             ? 'No active orders'
             : 'Nothing here yet',
         message: 'Your ${status.name} orders will appear here.',
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      itemCount: orders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _OrderCard(order: orders[index]),
+      ),
+      builder: (all) {
+        final filtered = all
+            .where((order) => order.status == status)
+            .toList(growable: false);
+        return RefreshIndicator(
+          onRefresh: () async => ref.invalidate(ordersProvider),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            itemCount: filtered.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, index) => _OrderCard(order: filtered[index]),
+          ),
+        );
+      },
     );
   }
 }

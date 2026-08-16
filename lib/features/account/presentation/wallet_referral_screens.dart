@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
-import '../../../shared/mock_data/mock_data.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../shared/repositories/engagement_repository.dart';
+import '../providers/engagement_providers.dart';
 
-class WalletScreen extends StatefulWidget {
+class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
 
   @override
-  State<WalletScreen> createState() => _WalletScreenState();
+  ConsumerState<WalletScreen> createState() => _WalletScreenState();
 }
 
-class _WalletScreenState extends State<WalletScreen>
+class _WalletScreenState extends ConsumerState<WalletScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
 
@@ -41,7 +45,10 @@ class _WalletScreenState extends State<WalletScreen>
           ),
         ],
       ),
-      body: Column(
+      body: AsyncView<WalletStatement>(
+        value: ref.watch(walletProvider),
+        onRetry: () => ref.invalidate(walletProvider),
+        builder: (wallet) => Column(
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -65,7 +72,7 @@ class _WalletScreenState extends State<WalletScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '₹1,284',
+                    '₹${wallet.balance.toStringAsFixed(0)}',
                     style: Theme.of(
                       context,
                     ).textTheme.headlineLarge?.copyWith(color: Colors.white),
@@ -91,18 +98,27 @@ class _WalletScreenState extends State<WalletScreen>
                     ],
                   ),
                   const Divider(color: Color(0x3355E1D1), height: 30),
-                  const Row(
+                  // Derived from the ledger the backend returned — the API
+                  // does not send a pre-aggregated breakdown, so nothing here
+                  // is invented.
+                  Row(
                     children: [
                       Expanded(
-                        child: _WalletStat(label: 'Cashback', value: '₹612'),
-                      ),
-                      Expanded(
-                        child: _WalletStat(label: 'Referrals', value: '₹386'),
+                        child: _WalletStat(
+                          label: 'Cashback',
+                          value: '₹${_sumMatching(wallet, 'cashback')}',
+                        ),
                       ),
                       Expanded(
                         child: _WalletStat(
-                          label: 'Total savings',
-                          value: '₹2,840',
+                          label: 'Referrals',
+                          value: '₹${_sumMatching(wallet, 'referral')}',
+                        ),
+                      ),
+                      Expanded(
+                        child: _WalletStat(
+                          label: 'Total earned',
+                          value: '₹${_sumCredits(wallet)}',
                         ),
                       ),
                     ],
@@ -125,16 +141,16 @@ class _WalletScreenState extends State<WalletScreen>
             child: TabBarView(
               controller: _tabs,
               children: [
-                _TransactionList(items: MockData.walletTransactions),
+                _TransactionList(items: wallet.transactions),
                 _TransactionList(
-                  items: MockData.walletTransactions
+                  items: wallet.transactions
                       .where(
                         (item) => item.title.toLowerCase().contains('cashback'),
                       )
                       .toList(),
                 ),
                 _TransactionList(
-                  items: MockData.walletTransactions
+                  items: wallet.transactions
                       .where(
                         (item) => item.title.toLowerCase().contains('referral'),
                       )
@@ -144,9 +160,18 @@ class _WalletScreenState extends State<WalletScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }
+
+  int _sumMatching(WalletStatement wallet, String keyword) => wallet.transactions
+      .where((item) => item.title.toLowerCase().contains(keyword))
+      .fold(0, (sum, item) => sum + item.amount);
+
+  int _sumCredits(WalletStatement wallet) => wallet.transactions
+      .where((item) => item.amount > 0)
+      .fold(0, (sum, item) => sum + item.amount);
 
   Widget _walletButton(IconData icon, String label, VoidCallback onTap) {
     return FilledButton.icon(
@@ -300,14 +325,18 @@ class WalletTransactionTile extends StatelessWidget {
   }
 }
 
-class ReferralScreen extends StatelessWidget {
+class ReferralScreen extends ConsumerWidget {
   const ReferralScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(referralSummaryProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Refer and Earn')),
-      body: ListView(
+      body: AsyncView<ReferralSummary>(
+        value: summary,
+        onRetry: () => ref.invalidate(referralSummaryProvider),
+        builder: (referral) => ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         children: [
           Container(
@@ -350,11 +379,11 @@ class ReferralScreen extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'YOUR CODE',
                               style: TextStyle(
                                 fontSize: 9,
@@ -363,8 +392,8 @@ class ReferralScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'AARAV386',
-                              style: TextStyle(
+                              referral.code,
+                              style: const TextStyle(
                                 fontSize: 19,
                                 color: AppColors.dark,
                                 fontWeight: FontWeight.w900,
@@ -375,8 +404,14 @@ class ReferralScreen extends StatelessWidget {
                         ),
                       ),
                       IconButton.filledTonal(
-                        onPressed: () =>
-                            _toast(context, 'Referral code copied'),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: referral.code),
+                          );
+                          if (context.mounted) {
+                            _toast(context, 'Referral code copied');
+                          }
+                        },
                         icon: const Icon(Icons.copy_rounded),
                       ),
                     ],
@@ -478,6 +513,7 @@ class ReferralScreen extends StatelessWidget {
           const _Rule(text: 'The ₹1 reward is added after order completion.'),
           const _Rule(text: 'You continue earning on future eligible orders.'),
         ],
+        ),
       ),
     );
   }

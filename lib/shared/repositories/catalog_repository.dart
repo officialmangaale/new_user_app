@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/api_exception.dart';
 import '../models/app_models.dart';
+import 'json_readers.dart';
 
 /// Catalog reads against restaurant-service.
 ///
@@ -26,10 +27,10 @@ class CatalogRepository {
       query: <String, dynamic>{'lat': ?lat, 'lng': ?lng},
     );
     return HomeFeed(
-      restaurants: _readList(data, 'restaurants').map(_restaurant).toList(
+      restaurants: readList(data, 'restaurants').map(_restaurant).toList(
         growable: false,
       ),
-      featuredItems: _readList(data, 'featured_items')
+      featuredItems: readList(data, 'featured_items')
           .map((json) => _catalogItem(json))
           .toList(growable: false),
     );
@@ -53,7 +54,7 @@ class CatalogRepository {
         'limit': limit,
       },
     );
-    return _listFrom(raw, keys: const ['restaurants', 'items'])
+    return listFrom(raw, keys: const ['restaurants', 'items'])
         .map(_restaurant)
         .toList(growable: false);
   }
@@ -79,14 +80,14 @@ class CatalogRepository {
       raw = await _get('/api/restaurants/$restaurantId/menu');
     }
 
-    final categories = _listFrom(raw, keys: const ['categories']);
+    final categories = listFrom(raw, keys: const ['categories']);
     if (categories.isNotEmpty) {
       return categories
           .map(
             (category) => MenuSection(
-              id: _readString(category, const ['id']),
-              name: _readString(category, const ['name']),
-              items: _readList(category, 'items')
+              id: readString(category, const ['id']),
+              name: readString(category, const ['name']),
+              items: readList(category, 'items')
                   .map((item) => _catalogItem(item, storeName: storeName))
                   .toList(growable: false),
             ),
@@ -96,7 +97,7 @@ class CatalogRepository {
     }
 
     // Some deployments return a flat item list instead of categories.
-    final items = _listFrom(raw, keys: const ['items']);
+    final items = listFrom(raw, keys: const ['items']);
     if (items.isEmpty) return const <MenuSection>[];
     return <MenuSection>[
       MenuSection(
@@ -115,7 +116,7 @@ class CatalogRepository {
       '/customer-web/search',
       query: <String, dynamic>{'q': query},
     );
-    return _listFrom(raw, keys: const ['restaurants', 'items', 'results'])
+    return listFrom(raw, keys: const ['restaurants', 'items', 'results'])
         .map(_restaurant)
         .toList(growable: false);
   }
@@ -155,15 +156,15 @@ class CatalogRepository {
   /// fees come from `/customer-web/cart/validate` at checkout.
   Restaurant _restaurant(Map<String, dynamic> json) {
     return Restaurant(
-      id: _readString(json, const ['id', 'restaurant_id']),
-      name: _readString(json, const ['name', 'restaurant_name']),
+      id: readString(json, const ['id', 'restaurant_id']),
+      name: readString(json, const ['name', 'restaurant_name']),
       cuisine: _readCuisine(json),
-      rating: _readDouble(json, const ['average_rating', 'rating']),
+      rating: readDouble(json, const ['average_rating', 'rating']),
       deliveryMinutes: _readDeliveryMinutes(json),
-      distanceKm: _readDouble(json, const ['distance_km', 'distance']),
+      distanceKm: readDouble(json, const ['distance_km', 'distance']),
       deliveryFee: 0,
       discount: 0,
-      imageUrl: _readString(json, const [
+      imageUrl: readString(json, const [
         'image_url',
         'banner_url',
         'cover_image_url',
@@ -178,21 +179,21 @@ class CatalogRepository {
   /// `originalPrice` falls back to `price`, which renders as "no discount"
   /// rather than inventing a strike-through price the backend never sent.
   CatalogItem _catalogItem(Map<String, dynamic> json, {String? storeName}) {
-    final price = _readDouble(json, const ['price']).round();
-    final original = _readDouble(json, const [
+    final price = readDouble(json, const ['price']).round();
+    final original = readDouble(json, const [
       'original_price',
       'mrp',
     ]).round();
     return CatalogItem(
-      id: _readString(json, const ['id', 'item_id', 'menu_item_id']),
-      name: _readString(json, const ['name', 'item_name']),
-      subtitle: _readString(json, const ['description', 'subtitle']),
+      id: readString(json, const ['id', 'item_id', 'menu_item_id']),
+      name: readString(json, const ['name', 'item_name']),
+      subtitle: readString(json, const ['description', 'subtitle']),
       store:
           storeName ??
-          _readString(json, const ['restaurant_name', 'store', 'store_name']),
+          readString(json, const ['restaurant_name', 'store', 'store_name']),
       price: price,
       originalPrice: original > price ? original : price,
-      imageUrl: _readString(json, const ['image_url', 'image']),
+      imageUrl: readString(json, const ['image_url', 'image']),
       type: CatalogItemType.food,
       isVeg: json['is_veg'] == true || json['is_vegetarian'] == true,
     );
@@ -221,69 +222,15 @@ class HomeFeed {
 }
 
 // -----------------------------------------------------------------------
-// defensive readers
+// mapping helpers
 // -----------------------------------------------------------------------
-
-List<Map<String, dynamic>> _listFrom(Object? raw, {required List<String> keys}) {
-  if (raw is List) {
-    return raw
-        .whereType<Map>()
-        .map((entry) => Map<String, dynamic>.from(entry))
-        .toList(growable: false);
-  }
-  if (raw is Map) {
-    for (final key in keys) {
-      final nested = raw[key];
-      if (nested is List) {
-        return nested
-            .whereType<Map>()
-            .map((entry) => Map<String, dynamic>.from(entry))
-            .toList(growable: false);
-      }
-    }
-  }
-  return const <Map<String, dynamic>>[];
-}
-
-List<Map<String, dynamic>> _readList(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is List) {
-    return value
-        .whereType<Map>()
-        .map((entry) => Map<String, dynamic>.from(entry))
-        .toList(growable: false);
-  }
-  return const <Map<String, dynamic>>[];
-}
-
-String _readString(Map<String, dynamic> json, List<String> keys) {
-  for (final key in keys) {
-    final value = json[key];
-    if (value == null) continue;
-    final text = value.toString().trim();
-    if (text.isNotEmpty) return text;
-  }
-  return '';
-}
-
-double _readDouble(Map<String, dynamic> json, List<String> keys) {
-  for (final key in keys) {
-    final value = json[key];
-    if (value is num) return value.toDouble();
-    if (value is String) {
-      final parsed = double.tryParse(value.replaceAll(RegExp(r'[^0-9.]'), ''));
-      if (parsed != null) return parsed;
-    }
-  }
-  return 0;
-}
 
 String _readCuisine(Map<String, dynamic> json) {
   final types = json['cuisine_types'];
   if (types is List && types.isNotEmpty) {
     return types.map((entry) => entry.toString()).join(', ');
   }
-  return _readString(json, const ['cuisine', 'category', 'type']);
+  return readString(json, const ['cuisine', 'category', 'type']);
 }
 
 /// `estimated_delivery_time` arrives as text like "25-30 mins"; the UI model

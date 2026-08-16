@@ -1,31 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
-import '../../../shared/mock_data/mock_data.dart';
+import '../../../core/widgets/async_view.dart';
+import '../../orders/providers/orders_providers.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final items = MockData.notifications;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifications = ref.watch(notificationsProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
-          TextButton(onPressed: () {}, child: const Text('Mark all read')),
+          TextButton(
+            onPressed: () => ref.invalidate(notificationsProvider),
+            child: const Text('Refresh'),
+          ),
         ],
       ),
-      body: items.isEmpty
-          ? const EmptyState(
-              icon: Icons.notifications_none_rounded,
-              title: 'All quiet for now',
-              message:
-                  'Order updates, group invites and rewards will appear here.',
-            )
-          : ListView.separated(
+      body: AsyncListView(
+        value: notifications,
+        onRetry: () => ref.invalidate(notificationsProvider),
+        empty: const EmptyState(
+          icon: Icons.notifications_none_rounded,
+          title: 'All quiet for now',
+          message: 'Order updates, group invites and rewards will appear here.',
+        ),
+        builder: (items) => ListView.separated(
               padding: const EdgeInsets.all(AppSpacing.md),
               itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 9),
@@ -81,6 +87,7 @@ class NotificationsScreen extends StatelessWidget {
                 );
               },
             ),
+      ),
     );
   }
 }
