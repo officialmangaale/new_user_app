@@ -1,30 +1,49 @@
+/// Authentication-specific Riverpod providers.
+///
+/// Infrastructure providers (`apiClientProvider`, `authStorageProvider`) live
+/// in `core/di/di_providers.dart` and are re-exported here for backward
+/// compatibility. New code should import from `core/di/di_providers.dart`
+/// directly.
+library;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/services/api_client.dart';
-import '../../../core/storage/auth_storage.dart';
+// ---- Legacy re-exports (kept for existing import sites) ----
+export '../../../core/di/di_providers.dart'
+    show apiClientProvider, authStorageProvider;
+
+import '../../../core/di/di_providers.dart';
+
+// ---- Data layer ----
+import '../data/repositories/auth_repository_impl.dart';
+
+// ---- Domain layer ----
+import '../domain/repositories/auth_repository_interface.dart';
+import '../domain/usecases/request_otp_usecase.dart';
+import '../domain/usecases/verify_otp_usecase.dart';
+
+// ---- Legacy repository (kept for backward compat during migration) ----
 import '../../../shared/repositories/auth_repository.dart';
-import '../../app_state/providers/app_controller.dart';
 
-/// Persisted customer session (token + identity).
-final authStorageProvider = Provider<AuthStorage>((ref) => AuthStorage());
-
-/// Shared HTTP client for both Mangaale customer services.
-///
-/// The bearer token is read per-request, so a login or logout takes effect
-/// immediately without rebuilding the client.
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final storage = ref.watch(authStorageProvider);
-  return ApiClient(
-    tokenReader: storage.readToken,
-    onUnauthorized: () async {
-      await storage.clear();
-      // Read lazily: this runs during a request, never during construction,
-      // so it cannot create a provider cycle.
-      ref.read(appControllerProvider.notifier).handleSessionExpired();
-    },
-  );
-});
-
+/// Legacy provider — screens not yet migrated to the ViewModel still use this.
+/// Will be removed once `auth_screens.dart` fully consumes the ViewModel.
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(ref.watch(apiClientProvider));
+});
+
+// ---- New architecture providers ----
+
+/// The clean repository, typed to the domain interface.
+final authRepositoryImplProvider = Provider<AuthRepositoryInterface>((ref) {
+  return AuthRepositoryImpl(ref.watch(apiClientProvider));
+});
+
+/// Use case: send OTP.
+final requestOtpUseCaseProvider = Provider<RequestOtpUseCase>((ref) {
+  return RequestOtpUseCase(ref.watch(authRepositoryImplProvider));
+});
+
+/// Use case: verify OTP.
+final verifyOtpUseCaseProvider = Provider<VerifyOtpUseCase>((ref) {
+  return VerifyOtpUseCase(ref.watch(authRepositoryImplProvider));
 });

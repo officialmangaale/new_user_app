@@ -2,10 +2,12 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
-import '../../core/services/api_client.dart';
-import '../../core/services/api_exception.dart';
-import '../models/app_models.dart';
-import 'json_readers.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../../core/services/api_exception.dart';
+import '../../../../shared/models/app_models.dart';
+import '../../../../shared/repositories/json_readers.dart';
+import '../../../../core/error/result.dart';
+import '../../domain/repositories/orders_repository_interface.dart';
 
 /// Cart, checkout and order reads/writes against restaurant-service.
 ///
@@ -13,8 +15,8 @@ import 'json_readers.dart';
 /// `customerOrdersApi.ts`). Pricing is **never** recomputed on the client —
 /// `/cart/validate` and the order responses return the authoritative billing
 /// summary and it is rendered verbatim.
-class OrdersRepository {
-  const OrdersRepository(this._client);
+class OrdersRepositoryImpl implements OrdersRepositoryInterface {
+  const OrdersRepositoryImpl(this._client);
 
   final ApiClient _client;
 
@@ -23,21 +25,25 @@ class OrdersRepository {
   // ------------------------------------------------------------------
 
   /// POST /customer-web/cart/validate — authoritative totals, taxes and fees.
-  Future<BillSummary> validateCart({
+  Future<Result<BillSummary>> validateCart({
     required String restaurantId,
     required List<CartLine> lines,
     String? couponCode,
   }) async {
-    final data = await _post('/customer-web/cart/validate', <String, dynamic>{
-      'restaurant_id': _asIntOrString(restaurantId),
-      'items': lines.map(_linePayload).toList(growable: false),
-      'coupon_code': ?couponCode,
-    });
-    return BillSummary.fromJson(data);
+    try {
+      final data = await _post('/customer-web/cart/validate', <String, dynamic>{
+        'restaurant_id': _asIntOrString(restaurantId),
+        'items': lines.map(_linePayload).toList(growable: false),
+        'coupon_code': ?couponCode,
+      });
+      return Result.success(_billSummaryFromJson(data));
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
+    }
   }
 
   /// POST /customer-web/coupons/validate.
-  Future<CouponResult> validateCoupon({
+  Future<Result<CouponResult>> validateCoupon({
     required String code,
     required String restaurantId,
     required int subtotal,
@@ -51,7 +57,7 @@ class OrdersRepository {
           'order_amount': subtotal,
         },
       );
-      return CouponResult(
+      return Result.success(CouponResult(
         valid: data['valid'] != false,
         code: readString(data, const ['code']),
         discountAmount: readDouble(data, const [
@@ -59,14 +65,14 @@ class OrdersRepository {
           'discount',
         ]).round(),
         message: readString(data, const ['message']),
-      );
+      ));
     } on ApiException catch (error) {
-      return CouponResult(
+      return Result.success(CouponResult(
         valid: false,
         code: code,
         discountAmount: 0,
         message: error.message,
-      );
+      ));
     }
   }
 
@@ -75,7 +81,7 @@ class OrdersRepository {
   /// The key is generated per checkout attempt and **reused** across retries so
   /// a lost response can never create a second order, matching the guarantee
   /// the backend enforces via `orders_restaurant_client_order_id_uq`.
-  Future<PlacedOrder> placeOrder({
+  Future<Result<PlacedOrder>> placeOrder({
     required String restaurantId,
     required List<CartLine> lines,
     required String idempotencyKey,
@@ -105,14 +111,16 @@ class OrdersRepository {
         },
       );
       final data = unwrapApiObject(response.data);
-      return PlacedOrder(
+      return Result.success(PlacedOrder(
         orderId: readString(data, const ['id', 'order_id']),
         orderNumber: readString(data, const ['order_number', 'display_number']),
         status: readString(data, const ['order_status', 'status']),
-        bill: BillSummary.fromJson(data),
-      );
+        bill: _billSummaryFromJson(data),
+      ));
     } on DioException catch (error) {
-      throw ApiException.fromDioException(error);
+      return Result.failure(ApiException.fromDioException(error).message);
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
     }
   }
 
@@ -131,48 +139,64 @@ class OrdersRepository {
   // ------------------------------------------------------------------
 
   /// GET /customer-web/orders — order history.
-  Future<List<DeliveryOrder>> fetchOrders({int page = 1, int limit = 20}) async {
-    final raw = await _get(
-      '/customer-web/orders',
-      query: <String, dynamic>{'page': page, 'limit': limit},
-    );
-    return listFrom(raw, keys: const ['orders', 'items', 'results'])
-        .map(_order)
-        .toList(growable: false);
+  Future<Result<List<DeliveryOrder>>> fetchOrders({int page = 1, int limit = 20}) async {
+    try {
+      final raw = await _get(
+        '/customer-web/orders',
+        query: <String, dynamic>{'page': page, 'limit': limit},
+      );
+      return Result.success(listFrom(raw, keys: const ['orders', 'items', 'results'])
+          .map(_order)
+          .toList(growable: false));
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
+    }
   }
 
   /// GET /customer-web/orders/active — orders still in progress.
-  Future<List<DeliveryOrder>> fetchActiveOrders() async {
-    final raw = await _get('/customer-web/orders/active');
-    return listFrom(raw, keys: const ['orders', 'items', 'results'])
-        .map(_order)
-        .toList(growable: false);
+  Future<Result<List<DeliveryOrder>>> fetchActiveOrders() async {
+    try {
+      final raw = await _get('/customer-web/orders/active');
+      return Result.success(listFrom(raw, keys: const ['orders', 'items', 'results'])
+          .map(_order)
+          .toList(growable: false));
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
+    }
   }
 
   /// GET /customer-web/orders/:id
-  Future<DeliveryOrder> fetchOrder(String orderId) async {
-    final raw = await _get('/customer-web/orders/$orderId');
-    return _order(raw is Map ? Map<String, dynamic>.from(raw) : {});
+  Future<Result<DeliveryOrder>> fetchOrder(String orderId) async {
+    try {
+      final raw = await _get('/customer-web/orders/$orderId');
+      return Result.success(_order(raw is Map ? Map<String, dynamic>.from(raw) : {}));
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
+    }
   }
 
   /// GET /customer-web/orders/:id/track — live tracking projection.
-  Future<OrderTracking> trackOrder(String orderId) async {
-    final raw = await _get('/customer-web/orders/$orderId/track');
-    final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
-    final order = data['order'];
-    final source = order is Map ? Map<String, dynamic>.from(order) : data;
-    return OrderTracking(
-      orderId: readString(source, const ['id', 'order_id']),
-      status: readString(source, const ['order_status', 'status']),
-      statusLabel: readString(source, const ['status_label', 'label']),
-      etaMinutes: readInt(source, const [
-        'eta_minutes',
-        'estimated_minutes',
-        'estimated_delivery_minutes',
-      ]),
-      riderName: readString(source, const ['rider_name', 'delivery_partner']),
-      riderPhone: readString(source, const ['rider_phone']),
-    );
+  Future<Result<OrderTracking>> trackOrder(String orderId) async {
+    try {
+      final raw = await _get('/customer-web/orders/$orderId/track');
+      final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final order = data['order'];
+      final source = order is Map ? Map<String, dynamic>.from(order) : data;
+      return Result.success(OrderTracking(
+        orderId: readString(source, const ['id', 'order_id']),
+        status: readString(source, const ['order_status', 'status']),
+        statusLabel: readString(source, const ['status_label', 'label']),
+        etaMinutes: readInt(source, const [
+          'eta_minutes',
+          'estimated_minutes',
+          'estimated_delivery_minutes',
+        ]),
+        riderName: readString(source, const ['rider_name', 'delivery_partner']),
+        riderPhone: readString(source, const ['rider_phone']),
+      ));
+    } on ApiException catch (error) {
+      return Result.failure(error.message);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -251,120 +275,43 @@ class OrdersRepository {
   }
 }
 
-/// Authoritative bill returned by the backend. Never computed on device.
-class BillSummary {
-  const BillSummary({
-    required this.subtotal,
-    required this.discount,
-    required this.deliveryFee,
-    required this.packagingCharge,
-    required this.cgst,
-    required this.sgst,
-    required this.taxAmount,
-    required this.platformFee,
-    required this.roundOff,
-    required this.grandTotal,
-    required this.valid,
-    required this.message,
-  });
-
-  final int subtotal;
-  final int discount;
-  final int deliveryFee;
-  final int packagingCharge;
-  final double cgst;
-  final double sgst;
-  final double taxAmount;
-  final int platformFee;
-  final double roundOff;
-  final int grandTotal;
-  final bool valid;
-  final String message;
-
-  factory BillSummary.fromJson(Map<String, dynamic> json) {
-    // Some endpoints nest the money under `billing`/`summary`.
-    final nested = json['billing'] ?? json['summary'] ?? json['bill'];
-    final source = nested is Map
-        ? <String, dynamic>{...json, ...Map<String, dynamic>.from(nested)}
-        : json;
-    return BillSummary(
-      subtotal: readDouble(source, const ['subtotal', 'item_total']).round(),
-      discount: readDouble(source, const [
-        'discount_amount',
-        'discount',
-      ]).round(),
-      deliveryFee: readDouble(source, const [
-        'delivery_fee',
-        'delivery_charge',
-      ]).round(),
-      packagingCharge: readDouble(source, const [
-        'extra_charges',
-        'packaging_charge',
-      ]).round(),
-      cgst: readDouble(source, const ['cgst', 'cgst_amount']),
-      sgst: readDouble(source, const ['sgst', 'sgst_amount']),
-      taxAmount: readDouble(source, const ['tax_amount', 'taxes']),
-      platformFee: readDouble(source, const [
-        'platform_fee_amount',
-        'platform_fee',
-      ]).round(),
-      roundOff: readDouble(source, const ['round_off_amount', 'round_off']),
-      grandTotal: readDouble(source, const [
-        'grand_total',
-        'total_amount',
-        'rounded_total_amount',
-        'payable_amount',
-      ]).round(),
-      valid: source['valid'] != false,
-      message: readString(source, const ['message']),
-    );
-  }
-}
-
-class CouponResult {
-  const CouponResult({
-    required this.valid,
-    required this.code,
-    required this.discountAmount,
-    required this.message,
-  });
-
-  final bool valid;
-  final String code;
-  final int discountAmount;
-  final String message;
-}
-
-class PlacedOrder {
-  const PlacedOrder({
-    required this.orderId,
-    required this.orderNumber,
-    required this.status,
-    required this.bill,
-  });
-
-  final String orderId;
-  final String orderNumber;
-  final String status;
-  final BillSummary bill;
-}
-
-class OrderTracking {
-  const OrderTracking({
-    required this.orderId,
-    required this.status,
-    required this.statusLabel,
-    required this.etaMinutes,
-    required this.riderName,
-    required this.riderPhone,
-  });
-
-  final String orderId;
-  final String status;
-  final String statusLabel;
-  final int etaMinutes;
-  final String riderName;
-  final String riderPhone;
+BillSummary _billSummaryFromJson(Map<String, dynamic> json) {
+  // Some endpoints nest the money under `billing`/`summary`.
+  final nested = json['billing'] ?? json['summary'] ?? json['bill'];
+  final source = nested is Map
+      ? <String, dynamic>{...json, ...Map<String, dynamic>.from(nested)}
+      : json;
+  return BillSummary(
+    subtotal: readDouble(source, const ['subtotal', 'item_total']).round(),
+    discount: readDouble(source, const [
+      'discount_amount',
+      'discount',
+    ]).round(),
+    deliveryFee: readDouble(source, const [
+      'delivery_fee',
+      'delivery_charge',
+    ]).round(),
+    packagingCharge: readDouble(source, const [
+      'extra_charges',
+      'packaging_charge',
+    ]).round(),
+    cgst: readDouble(source, const ['cgst', 'cgst_amount']),
+    sgst: readDouble(source, const ['sgst', 'sgst_amount']),
+    taxAmount: readDouble(source, const ['tax_amount', 'taxes']),
+    platformFee: readDouble(source, const [
+      'platform_fee_amount',
+      'platform_fee',
+    ]).round(),
+    roundOff: readDouble(source, const ['round_off_amount', 'round_off']),
+    grandTotal: readDouble(source, const [
+      'grand_total',
+      'total_amount',
+      'rounded_total_amount',
+      'payable_amount',
+    ]).round(),
+    valid: source['valid'] != false,
+    message: readString(source, const ['message']),
+  );
 }
 
 /// Cart line as restaurant-service expects it.

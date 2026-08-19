@@ -7,6 +7,7 @@ import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../cart/providers/cart_controller.dart';
 import '../providers/catalog_providers.dart';
 import 'add_to_cart.dart';
 
@@ -48,13 +49,13 @@ class CategoryItemsScreen extends ConsumerWidget {
             return ProductCard(
               item: item,
               quantity: ref.watch(
-                appControllerProvider.select(
+                cartControllerProvider.select(
                   (state) => state.quantityForItem(item.id),
                 ),
               ),
               onAdd: () => addItemToCart(context, ref, item),
               onRemove: () =>
-                  ref.read(appControllerProvider.notifier).removeItemById(item.id),
+                  ref.read(cartControllerProvider.notifier).removeItemById(item.id),
               onTap: () => context.push('/food-item/${item.id}'),
             );
           },

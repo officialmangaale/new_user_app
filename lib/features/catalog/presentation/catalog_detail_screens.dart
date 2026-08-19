@@ -6,11 +6,10 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
-import '../../../shared/mock_data/mock_data.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
-import '../../../shared/repositories/catalog_repository.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../cart/providers/cart_controller.dart';
 import '../providers/catalog_providers.dart';
 import 'add_to_cart.dart';
 
@@ -234,7 +233,7 @@ class _RestaurantDetailsScreenState
                     final item = items[index];
                     return _MenuItemTile(
                       item: item,
-                      quantity: ref.watch(appControllerProvider.select((state) => state.quantityForItem(item.id))),
+                      quantity: ref.watch(cartControllerProvider.select((state) => state.quantityForItem(item.id))),
                       onTap: () => context.push('/food-item/${item.id}'),
                       onAdd: () => addItemToCart(
                         context,
@@ -243,7 +242,7 @@ class _RestaurantDetailsScreenState
                         restaurantId: widget.restaurantId,
                       ),
                       onRemove: () => ref
-                          .read(appControllerProvider.notifier)
+                          .read(cartControllerProvider.notifier)
                           .removeItemById(item.id),
                     );
                   },
@@ -439,11 +438,25 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final item = MockData.itemById(widget.itemId);
-    final quantity = ref.watch(
-      appControllerProvider.select((state) => state.quantityForItem(item.id)),
-    );
-    return Scaffold(
+    final itemAsync = ref.watch(itemDetailProvider(widget.itemId));
+
+    return itemAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        body: Center(
+          child: Text(
+            'Could not load item.',
+            style: const TextStyle(color: AppColors.error),
+          ),
+        ),
+      ),
+      data: (item) {
+        final quantity = ref.watch(
+          cartControllerProvider.select((state) => state.quantityForItem(item.id)),
+        );
+        return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar.large(
@@ -587,7 +600,7 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
                 quantity: quantity,
                 onAdd: () => addItemToCart(context, ref, item),
                 onRemove: () => ref
-                    .read(appControllerProvider.notifier)
+                    .read(cartControllerProvider.notifier)
                     .removeItemById(item.id),
               ),
               const SizedBox(width: 10),
@@ -611,6 +624,8 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -630,11 +645,25 @@ class _GroceryProductDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final item = MockData.itemById(widget.itemId);
-    final quantity = ref.watch(
-      appControllerProvider.select((state) => state.quantityForItem(item.id)),
-    );
-    return Scaffold(
+    final itemAsync = ref.watch(itemDetailProvider(widget.itemId));
+
+    return itemAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => const Scaffold(
+        body: Center(
+          child: Text(
+            'Could not load item.',
+            style: TextStyle(color: AppColors.error),
+          ),
+        ),
+      ),
+      data: (item) {
+        final quantity = ref.watch(
+          cartControllerProvider.select((state) => state.quantityForItem(item.id)),
+        );
+        return Scaffold(
       appBar: AppBar(
         title: const Text('Product details'),
         actions: [
@@ -798,7 +827,7 @@ class _GroceryProductDetailsScreenState
                 quantity: quantity,
                 onAdd: () => addItemToCart(context, ref, item),
                 onRemove: () => ref
-                    .read(appControllerProvider.notifier)
+                    .read(cartControllerProvider.notifier)
                     .removeItemById(item.id),
               ),
               const SizedBox(width: 10),
@@ -821,6 +850,8 @@ class _GroceryProductDetailsScreenState
           ),
         ),
       ),
+    );
+      },
     );
   }
 }

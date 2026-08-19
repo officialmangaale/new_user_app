@@ -7,11 +7,13 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
-import '../../../core/services/api_exception.dart';
-import '../../../shared/repositories/orders_repository.dart';
+import '../../../core/error/result.dart';
+import '../../orders/data/repositories/orders_repository_impl.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../orders/providers/orders_providers.dart';
 import '../../authentication/presentation/auth_screens.dart';
+import '../providers/cart_controller.dart';
+import '../providers/checkout_view_model.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -69,7 +71,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         title: Text(grocery ? 'Your grocery basket' : 'Your food cart'),
         actions: [
           TextButton(
-            onPressed: ref.read(appControllerProvider.notifier).clearCart,
+            onPressed: ref.read(cartControllerProvider.notifier).clearCart,
             child: const Text('Clear'),
           ),
         ],
@@ -345,10 +347,10 @@ class _CartLineTile extends ConsumerWidget {
               quantity: line.quantity,
               compact: true,
               onAdd: () => ref
-                  .read(appControllerProvider.notifier)
+                  .read(cartControllerProvider.notifier)
                   .addItem(line.item),
               onRemove: () => ref
-                  .read(appControllerProvider.notifier)
+                  .read(cartControllerProvider.notifier)
                   .removeItem(line.lineId),
             ),
             const SizedBox(height: 5),
@@ -360,7 +362,7 @@ class _CartLineTile extends ConsumerWidget {
               height: 32,
               child: TextButton(
                 onPressed: () => ref
-                    .read(appControllerProvider.notifier)
+                    .read(cartControllerProvider.notifier)
                     .removeLine(line.lineId),
                 child: const Text('Remove'),
               ),
@@ -682,42 +684,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   /// Generated once per checkout screen, not per tap, so a retry after a lost
   /// response resolves to the original order instead of creating a second one.
-  final String _idempotencyKey = OrdersRepository.newIdempotencyKey();
+  final String _idempotencyKey = OrdersRepositoryImpl.newIdempotencyKey();
 
-  /// Places the order against restaurant-service. Navigation only happens on a
+  /// Places the order via the ViewModel. Navigation only happens on a
   /// confirmed server response — a failure never shows success.
   Future<void> _placeOrder() async {
-    final state = ref.read(appControllerProvider);
-    final lines = ref.read(cartLinesProvider);
-
-    if (lines.isEmpty) {
-      _showError('Your cart is empty.');
-      return;
-    }
-    if (state.cartRestaurantId.isEmpty) {
-      _showError(
-        'We could not tell which restaurant this cart belongs to. '
-        'Please reopen the restaurant and add items again.',
-      );
-      return;
-    }
-
     setState(() => _paying = true);
     try {
-      final placed = await ref
-          .read(ordersRepositoryProvider)
+      final result = await ref
+          .read(checkoutViewModelProvider.notifier)
           .placeOrder(
-            restaurantId: state.cartRestaurantId,
-            lines: lines,
             idempotencyKey: _idempotencyKey,
             paymentMethod: 'cod',
           );
-      ref.read(appControllerProvider.notifier).clearCart();
-      ref.invalidate(ordersProvider);
+      
       if (!mounted) return;
-      context.go('/tracking/${placed.orderId}');
-    } on ApiException catch (error) {
-      _showError(error.message);
+      
+      result.when(
+        success: (placed) => context.go('/tracking/${placed.orderId}'),
+        failure: (failure) => _showError(failure.message),
+      );
     } finally {
       if (mounted) setState(() => _paying = false);
     }

@@ -7,13 +7,13 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
-import '../../../shared/repositories/catalog_repository.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../account/presentation/profile_screen.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../account/providers/engagement_providers.dart';
 import '../../catalog/presentation/add_to_cart.dart';
 import '../../catalog/providers/catalog_providers.dart';
+import '../../cart/providers/cart_controller.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 
 class HomeShellScreen extends ConsumerWidget {
@@ -291,10 +291,10 @@ class DeliveryHomeFeed extends ConsumerWidget {
             final item = items[index];
             return ProductCard(
               item: item,
-              quantity: ref.watch(appControllerProvider.select((state) => state.quantityForItem(item.id))),
+              quantity: ref.watch(cartControllerProvider.select((state) => state.quantityForItem(item.id))),
               onAdd: () => addItemToCart(context, ref, item),
               onRemove: () =>
-                  ref.read(appControllerProvider.notifier).removeItemById(item.id),
+                  ref.read(cartControllerProvider.notifier).removeItemById(item.id),
               onTap: () => context.push(
                 type == CatalogItemType.food
                     ? '/food-item/${item.id}'

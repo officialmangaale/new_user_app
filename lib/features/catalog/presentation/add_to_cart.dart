@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/app_models.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../cart/providers/cart_controller.dart';
 import 'item_customize_sheet.dart';
 
 /// Single entry point for adding an item to the cart.
@@ -18,7 +19,7 @@ Future<void> addItemToCart(
   String? restaurantId,
   bool forceCustomise = false,
 }) async {
-  final controller = ref.read(appControllerProvider.notifier);
+  final controller = ref.read(cartControllerProvider.notifier);
 
   if (!item.needsCustomisation) {
     controller.addItem(item, restaurantId: restaurantId);
