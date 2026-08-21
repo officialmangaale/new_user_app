@@ -154,9 +154,17 @@ class AppSearchBar extends StatelessWidget {
 }
 
 class LocationHeader extends StatelessWidget {
-  const LocationHeader({this.grocery = false, this.onNotifications, super.key});
+  const LocationHeader({
+    this.grocery = false,
+    this.locationLabel,
+    this.deliveryLabel,
+    this.onNotifications,
+    super.key,
+  });
 
   final bool grocery;
+  final String? locationLabel;
+  final String? deliveryLabel;
   final VoidCallback? onNotifications;
 
   @override
@@ -178,7 +186,8 @@ class LocationHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                grocery ? 'Delivery in 12 minutes' : 'Delivering to',
+                deliveryLabel ??
+                    (grocery ? 'Grocery delivery' : 'Delivering to'),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: grocery ? AppColors.dark : AppColors.textSecondary,
                   fontWeight: FontWeight.w700,
@@ -189,7 +198,7 @@ class LocationHeader extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      'Home • Indiranagar',
+                      locationLabel ?? 'Use current location',
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w800,

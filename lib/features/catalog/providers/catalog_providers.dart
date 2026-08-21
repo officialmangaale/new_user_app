@@ -181,6 +181,22 @@ final searchResultsProvider = FutureProvider.family<List<Restaurant>, String>((
   return _unwrap(result);
 });
 
+final catalogSearchResultsProvider =
+    FutureProvider.family<CatalogSearchResults, String>((ref, query) async {
+  final trimmed = query.trim();
+  if (trimmed.length < 2) {
+    return const CatalogSearchResults(
+      items: <CatalogItem>[],
+      restaurants: <Restaurant>[],
+    );
+  }
+  final location = await ref.watch(currentLocationProvider.future);
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .searchCatalog(trimmed, lat: location?.latitude, lng: location?.longitude);
+  return _unwrap(result);
+});
+
 final restaurantDetailProvider = FutureProvider.family<Restaurant, String>((
   ref,
   restaurantId,
@@ -193,7 +209,10 @@ final restaurantMenuProvider = FutureProvider.family<List<MenuSection>, String>(
   ref,
   restaurantId,
 ) async {
-  final result = await ref.watch(fetchRestaurantMenuUseCaseProvider).call(restaurantId);
+  final restaurant = await ref.watch(restaurantDetailProvider(restaurantId).future);
+  final result = await ref
+      .watch(fetchRestaurantMenuUseCaseProvider)
+      .call(restaurantId, storeName: restaurant.name);
   return _unwrap(result);
 });
 

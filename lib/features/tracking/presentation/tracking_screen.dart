@@ -100,6 +100,15 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     final eta = (live != null && live.etaMinutes > 0)
         ? '${live.etaMinutes} min'
         : (_statusIndex >= 5 ? 'Arriving' : '—');
+    final riderName = live?.riderName.trim() ?? '';
+    final riderLabel = riderName.isEmpty ? 'Delivery partner' : riderName;
+    final riderPhone = live?.riderPhone.trim() ?? '';
+    final statusMessage = live?.statusLabel.trim() ?? '';
+    final deliveryNote = statusMessage.isNotEmpty
+        ? statusMessage
+        : riderName.isNotEmpty
+            ? '$riderName is handling your delivery'
+            : 'Live tracking updates will appear here';
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -118,7 +127,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               height: 330,
               child: Stack(
                 children: [
-                  const Positioned.fill(child: _MapPlaceholder()),
+                  Positioned.fill(
+                    child: _MapPlaceholder(riderLabel: riderLabel),
+                  ),
                   Positioned(
                     left: 16,
                     right: 16,
@@ -185,7 +196,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                                   ).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 3),
-                                const Text('Arjun is heading to your location'),
+                                Text(deliveryNote),
                               ],
                             ),
                           ),
@@ -196,10 +207,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                                 eta,
                                 style: Theme.of(context).textTheme.titleLarge
                                     ?.copyWith(color: AppColors.dark),
-                              ),
-                              const Text(
-                                '1.8 km away',
-                                style: TextStyle(fontSize: 11),
                               ),
                             ],
                           ),
@@ -216,7 +223,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             sliver: SliverList.list(
               children: [
                 RiderInformationCard(
-                  onCall: () => _toast('Calling Arjun…'),
+                  name: riderLabel,
+                  phone: riderPhone,
+                  onCall: riderPhone.isEmpty
+                      ? null
+                      : () => _toast('Calling $riderLabel…'),
                   onChat: () => _toast('Rider chat preview opened'),
                   onSafety: () => _safetySheet(context),
                 ),
@@ -227,10 +238,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 WaitingPuzzleGame(pausedForOrderAlert: _importantAlert),
-                const SizedBox(height: AppSpacing.md),
-                const _SharedOrderSummary(),
-                const SizedBox(height: AppSpacing.md),
-                const _CollapsibleOrderSummary(),
               ],
             ),
           ),
@@ -301,7 +308,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 }
 
 class _MapPlaceholder extends StatelessWidget {
-  const _MapPlaceholder();
+  const _MapPlaceholder({required this.riderLabel});
+
+  final String riderLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -319,12 +328,12 @@ class _MapPlaceholder extends StatelessWidget {
               color: AppColors.navy,
             ),
           ),
-          const Positioned(
+          Positioned(
             right: 94,
             top: 138,
             child: _MapMarker(
               icon: Icons.delivery_dining_rounded,
-              label: 'Arjun',
+              label: riderLabel,
               color: AppColors.primary,
             ),
           ),
@@ -447,9 +456,15 @@ class _MapMarker extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 86),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+            ),
           ),
         ),
       ],
@@ -459,12 +474,16 @@ class _MapMarker extends StatelessWidget {
 
 class RiderInformationCard extends StatelessWidget {
   const RiderInformationCard({
+    required this.name,
+    required this.phone,
     required this.onCall,
     required this.onChat,
     required this.onSafety,
     super.key,
   });
-  final VoidCallback onCall;
+  final String name;
+  final String phone;
+  final VoidCallback? onCall;
   final VoidCallback onChat;
   final VoidCallback onSafety;
 
@@ -492,34 +511,28 @@ class RiderInformationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Arjun Kumar',
+                        name,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 3),
-                      const Row(
+                      Row(
                         children: [
-                          Icon(
-                            Icons.star_rounded,
-                            color: AppColors.warning,
+                          const Icon(
+                            Icons.delivery_dining_rounded,
+                            color: AppColors.dark,
                             size: 17,
                           ),
                           Expanded(
                             child: Text(
-                              '4.9  •  Electric scooter',
+                              phone.isEmpty
+                                  ? 'Assigned by restaurant'
+                                  : phone,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 3),
-                      const Text(
-                        'KA 03 EF 2147',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
                       ),
                     ],
                   ),
@@ -569,7 +582,7 @@ class _RiderAction extends StatelessWidget {
   });
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -582,7 +595,11 @@ class _RiderAction extends StatelessWidget {
           CircleAvatar(
             radius: 19,
             backgroundColor: AppColors.light,
-            child: Icon(icon, color: AppColors.dark, size: 18),
+            child: Icon(
+              icon,
+              color: onTap == null ? AppColors.textMuted : AppColors.dark,
+              size: 18,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -677,102 +694,6 @@ class _StatusTimeline extends StatelessWidget {
               }),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SharedOrderSummary extends StatelessWidget {
-  const _SharedOrderSummary();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.light,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.people_alt_rounded, color: AppColors.dark),
-              const SizedBox(width: 9),
-              Text(
-                'FoodShare delivery',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ],
-          ),
-          const SizedBox(height: 13),
-          const Row(
-            children: [
-              Expanded(
-                child: _GroupStat(label: 'Participants', value: '5'),
-              ),
-              Expanded(
-                child: _GroupStat(label: 'Group savings', value: '₹412'),
-              ),
-              Expanded(
-                child: _GroupStat(label: 'Preparation', value: 'Complete'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Delivery sequence: You’re stop 1 of 3. Other addresses are kept private.',
-            style: TextStyle(fontSize: 12, color: AppColors.dark),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GroupStat extends StatelessWidget {
-  const _GroupStat({required this.label, required this.value});
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        value,
-        style: const TextStyle(
-          fontWeight: FontWeight.w900,
-          color: AppColors.dark,
-        ),
-      ),
-      Text(label, style: const TextStyle(fontSize: 9)),
-    ],
-  );
-}
-
-class _CollapsibleOrderSummary extends StatelessWidget {
-  const _CollapsibleOrderSummary();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ExpansionTile(
-        shape: const Border(),
-        title: Text(
-          'Order summary',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        subtitle: const Text('3 items • ₹624'),
-        children: const [
-          ListTile(
-            title: Text('Royal Chicken Biryani × 2'),
-            trailing: Text('₹558'),
-          ),
-          ListTile(title: Text('House dip × 1'), trailing: Text('₹29')),
-          ListTile(title: Text('Taxes & fees'), trailing: Text('₹37')),
-          SizedBox(height: 8),
         ],
       ),
     );

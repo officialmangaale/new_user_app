@@ -41,11 +41,22 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           if (lng != null) 'lng': lng,
         },
       );
+      final restaurantRows = readList(data, 'restaurants');
+      final trending = await _get(
+        '/customer-web/trending-items',
+        query: <String, dynamic>{
+          if (lat != null) 'lat': lat,
+          if (lng != null) 'lng': lng,
+          'limit': 12,
+        },
+      );
       return HomeFeed(
-        restaurants: readList(data, 'restaurants').map(_restaurant).toList(
-          growable: false,
-        ),
-        featuredItems: readList(data, 'featured_items')
+        restaurants: (restaurantRows.isNotEmpty
+                ? restaurantRows
+                : readList(data, 'recommended_restaurants'))
+            .map(_restaurant)
+            .toList(growable: false),
+        featuredItems: listFrom(trending, keys: const ['items'])
             .map((json) => _catalogItem(json))
             .toList(growable: false),
       );
@@ -289,6 +300,32 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
   }
 
   @override
+  Future<Result<CatalogSearchResults>> searchCatalog(
+    String query, {
+    double? lat,
+    double? lng,
+  }) {
+    return _run(() async {
+      final data = await _getObject(
+        '/customer-web/search',
+        query: <String, dynamic>{
+          'q': query,
+          if (lat != null) 'lat': lat,
+          if (lng != null) 'lng': lng,
+        },
+      );
+      return CatalogSearchResults(
+        items: readList(data, 'dishes')
+            .map((json) => _catalogItem(json))
+            .toList(growable: false),
+        restaurants: readList(data, 'restaurants')
+            .map(_restaurant)
+            .toList(growable: false),
+      );
+    });
+  }
+
+  @override
   Future<Result<CatalogItem>> fetchItemDetail(String itemId) {
     return _run(() async {
       final data = await _getObject('/customer-web/catalog/items/$itemId');
@@ -332,14 +369,26 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       rating: readDouble(json, const ['average_rating', 'rating']),
       deliveryMinutes: _readDeliveryMinutes(json),
       distanceKm: readDouble(json, const ['distance_km', 'distance']),
-      deliveryFee: 0,
-      discount: 0,
+      deliveryFee: readDouble(json, const [
+        'delivery_fee',
+        'delivery_charge',
+      ]).round(),
+      discount: readDouble(json, const [
+        'discount',
+        'discount_percent',
+        'offer_discount',
+      ]).round(),
       imageUrl: readString(json, const [
         'image_url',
         'banner_url',
         'cover_image_url',
         'background_image_url',
         'logo_url',
+      ]),
+      foodShare: readBool(json, const [
+        'food_share',
+        'foodshare',
+        'is_food_share_enabled',
       ]),
     );
   }
@@ -366,6 +415,7 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       imageUrl: readString(json, const ['image_url', 'image']),
       type: CatalogItemType.food,
       storeId: storeId ?? readString(json, const ['restaurant_id', 'store_id']),
+      categoryId: readString(json, const ['category_id']),
       isVeg: json['is_veg'] == true || json['is_vegetarian'] == true,
       variants: readList(json, 'variants')
           .map(

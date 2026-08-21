@@ -67,6 +67,13 @@ abstract interface class CatalogRepositoryInterface {
   /// Searches restaurants by query.
   Future<Result<List<Restaurant>>> searchRestaurants(String query);
 
+  /// Searches both dishes and restaurants by query.
+  Future<Result<CatalogSearchResults>> searchCatalog(
+    String query, {
+    double? lat,
+    double? lng,
+  });
+
   /// Fetches detailed information for a specific catalog item.
   Future<Result<CatalogItem>> fetchItemDetail(String itemId);
 }

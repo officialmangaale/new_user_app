@@ -21,6 +21,7 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
   Future<Result<PlacedOrder>> placeOrder({
     required String idempotencyKey,
     required String paymentMethod,
+    String? instructions,
   }) async {
     final cartState = ref.read(cartControllerProvider);
     final lines = ref.read(cartLinesProvider);
@@ -37,6 +38,7 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
         lines: lines,
         idempotencyKey: idempotencyKey,
         paymentMethod: paymentMethod,
+        instructions: instructions,
       );
     }
 
@@ -51,11 +53,60 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
 
     state = const AsyncValue.loading();
 
+    final location = await ref.read(currentLocationProvider.future);
+    final profile = await _readProfile();
+    final address = await _readDefaultAddress();
+    final storedName = await ref.read(authStorageProvider).readUserName();
+    final storedPhone = await ref.read(authStorageProvider).readUserPhone();
+    final customerName = (profile?.name ?? storedName ?? '').trim();
+    if (customerName.isEmpty) {
+      final failure = const ValidationFailure(
+        'Please update your name before placing an order.',
+      );
+      state = AsyncValue.error(failure, StackTrace.current);
+      return Result.failure(failure);
+    }
+
+    final customerPhone = (profile?.phone ?? storedPhone ?? '').trim();
+    if (customerPhone.length < 10) {
+      final failure = const ValidationFailure(
+        'Please update your phone number before placing an order.',
+      );
+      state = AsyncValue.error(failure, StackTrace.current);
+      return Result.failure(failure);
+    }
+
+    final hasSavedAddress =
+        address != null && address.addressLine1.trim().isNotEmpty;
+    if (!hasSavedAddress && location == null) {
+      final failure = const ValidationFailure(
+        'Save a delivery address or turn on location to place an order.',
+      );
+      state = AsyncValue.error(failure, StackTrace.current);
+      return Result.failure(failure);
+    }
+
+    final latitude = location?.latitude ?? address?.latitude ?? 0;
+    final longitude = location?.longitude ?? address?.longitude ?? 0;
+    final deliveryAddressLine1 = hasSavedAddress
+        ? address!.addressLine1
+        : 'Current location';
+
     final result = await ref.read(placeOrderUseCaseProvider)(
       restaurantId: cartState.cartRestaurantId,
       lines: lines,
       idempotencyKey: idempotencyKey,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      deliveryAddressLine1: deliveryAddressLine1,
+      deliveryLatitude: latitude,
+      deliveryLongitude: longitude,
+      deliveryArea: address?.area,
+      deliveryCity: address?.city,
+      deliveryPincode: address?.pincode,
+      deliveryLandmark: address?.area,
       paymentMethod: paymentMethod,
+      instructions: instructions,
     );
 
     return result.when(
@@ -77,6 +128,7 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
     required List<CartLine> lines,
     required String idempotencyKey,
     required String paymentMethod,
+    String? instructions,
   }) async {
     final merchantId = cartState.cartGroceryMerchantId.isNotEmpty
         ? cartState.cartGroceryMerchantId
@@ -130,6 +182,7 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
       deliveryLongitude: longitude,
       deliveryLandmark: address?.area,
       paymentMethod: paymentMethod,
+      instructions: instructions,
     );
 
     return result.when(

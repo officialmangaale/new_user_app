@@ -14,7 +14,7 @@ import '../../cart/providers/cart_controller.dart';
 import 'add_to_cart.dart';
 import '../providers/catalog_providers.dart';
 
-/// Global search across restaurants, backed by `/customer-web/search`.
+/// Global search across dishes and restaurants, backed by `/customer-web/search`.
 ///
 /// Input is debounced so typing does not fire a request per keystroke.
 class SearchScreen extends ConsumerStatefulWidget {
@@ -92,31 +92,103 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             )
           : grocery
               ? _GrocerySearchResults(query: _query)
-              : AsyncListView(
-                  value: ref.watch(searchResultsProvider(_query)),
+              : AsyncView<CatalogSearchResults>(
+                  value: ref.watch(catalogSearchResultsProvider(_query)),
                   onRetry: () =>
-                      ref.invalidate(searchResultsProvider(_query)),
+                      ref.invalidate(catalogSearchResultsProvider(_query)),
+                  isEmpty: (results) => results.isEmpty,
                   empty: EmptyState(
                     icon: Icons.search_off_rounded,
                     title: 'No matches for “$_query”',
                     message:
                         'Try a different dish, cuisine or restaurant name.',
                   ),
-                  builder: (restaurants) => ListView.separated(
+                  builder: (results) => ListView(
                     padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: restaurants.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final restaurant = restaurants[index];
-                      return RestaurantCard(
-                        restaurant: restaurant,
-                        onTap: () =>
-                            context.push('/restaurant/${restaurant.id}'),
-                      );
-                    },
+                    children: [
+                      if (results.items.isNotEmpty) ...[
+                        const _SearchSectionTitle(title: 'Menu items'),
+                        const SizedBox(height: 10),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 220,
+                            mainAxisExtent: 278,
+                            crossAxisSpacing: AppSpacing.sm,
+                            mainAxisSpacing: AppSpacing.sm,
+                          ),
+                          itemCount: results.items.length,
+                          itemBuilder: (context, index) {
+                            final item = results.items[index];
+                            return ProductCard(
+                              width: double.infinity,
+                              item: item,
+                              quantity: ref.watch(
+                                cartControllerProvider.select(
+                                  (state) => state.quantityForItem(
+                                    item.id,
+                                    type: item.type,
+                                    storeId: item.storeId,
+                                  ),
+                                ),
+                              ),
+                              onAdd: () => _addSearchItem(context, ref, item),
+                              onRemove: () => ref
+                                  .read(cartControllerProvider.notifier)
+                                  .removeItemById(item.id),
+                              onTap: () => context.push('/food-item/${item.id}'),
+                            );
+                          },
+                        ),
+                      ],
+                      if (results.restaurants.isNotEmpty) ...[
+                        if (results.items.isNotEmpty)
+                          const SizedBox(height: AppSpacing.lg),
+                        const _SearchSectionTitle(title: 'Restaurants'),
+                        const SizedBox(height: 10),
+                        for (final restaurant in results.restaurants) ...[
+                          SizedBox(
+                            height: 254,
+                            child: RestaurantCard(
+                              restaurant: restaurant,
+                              onTap: () =>
+                                  context.push('/restaurant/${restaurant.id}'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+                    ],
                   ),
                 ),
     );
+  }
+}
+
+Future<void> _addSearchItem(
+  BuildContext context,
+  WidgetRef ref,
+  CatalogItem item,
+) async {
+  try {
+    final detailed = await ref.read(itemDetailProvider(item.id).future);
+    if (!context.mounted) return;
+    await addItemToCart(context, ref, detailed);
+  } catch (_) {
+    if (context.mounted) context.push('/food-item/${item.id}');
+  }
+}
+
+class _SearchSectionTitle extends StatelessWidget {
+  const _SearchSectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(title, style: Theme.of(context).textTheme.titleMedium);
   }
 }
 

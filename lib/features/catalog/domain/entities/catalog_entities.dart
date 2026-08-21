@@ -144,3 +144,16 @@ class HomeFeed {
   final List<Restaurant> restaurants;
   final List<CatalogItem> featuredItems;
 }
+
+/// Mixed global search payload from `/customer-web/search`.
+class CatalogSearchResults {
+  const CatalogSearchResults({
+    required this.items,
+    required this.restaurants,
+  });
+
+  final List<CatalogItem> items;
+  final List<Restaurant> restaurants;
+
+  bool get isEmpty => items.isEmpty && restaurants.isEmpty;
+}

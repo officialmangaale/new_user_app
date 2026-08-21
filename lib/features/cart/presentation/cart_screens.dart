@@ -5,9 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
-import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
-import '../../../core/error/result.dart';
+import '../../../shared/repositories/account_repository.dart';
 import '../../orders/data/repositories/orders_repository_impl.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../orders/providers/orders_providers.dart';
@@ -23,8 +22,6 @@ class CartScreen extends ConsumerStatefulWidget {
 }
 
 class _CartScreenState extends ConsumerState<CartScreen> {
-  bool _shared = true;
-  bool _couponApplied = false;
   final _instructions = TextEditingController();
 
   @override
@@ -64,7 +61,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final packagingFee = bill?.packagingCharge ?? 0;
     final deliveryFee = bill?.deliveryFee ?? 0;
     final couponDiscount = bill?.discount ?? 0;
-    final savings = couponDiscount;
     final payable = bill?.grandTotal ?? total;
     return Scaffold(
       appBar: AppBar(
@@ -102,10 +98,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
-                      AppPill(
-                        label: grocery ? '12 min' : '24 min',
-                        icon: Icons.schedule_rounded,
-                      ),
                     ],
                   ),
                   const Divider(height: 28),
@@ -132,61 +124,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          PremiumSurface(
-            padding: EdgeInsets.zero,
-            child: ListTile(
-              minTileHeight: 68,
-              leading: const CircleAvatar(
-                backgroundColor: AppColors.primaryLight,
-                child: Icon(
-                  Icons.local_offer_outlined,
-                  color: AppColors.primaryDark,
-                ),
-              ),
-              title: Text(
-                _couponApplied ? 'WELCOME50 applied' : 'Apply coupon',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                _couponApplied ? 'You save ₹50' : 'View available offers',
-              ),
-              trailing: Icon(
-                _couponApplied
-                    ? Icons.check_circle_rounded
-                    : Icons.chevron_right_rounded,
-                color: _couponApplied
-                    ? AppColors.success
-                    : AppColors.textSecondary,
-              ),
-              onTap: () => _showCoupons(context),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Choose your delivery option',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 10),
-          _CheckoutChoice(
-            title: 'Join or create a shared order',
-            subtitle: 'Save ₹$savings · 3 nearby users · Adds 8–12 min',
-            icon: Icons.people_alt_rounded,
-            selected: _shared,
-            onTap: () => setState(() => _shared = true),
-            badge: 'Best value',
-            details: const ['Food: up to 15%', 'Delivery: 50% off'],
-          ),
-          const SizedBox(height: 10),
-          _CheckoutChoice(
-            title: 'Order individually',
-            subtitle: 'Standard pricing · Normal delivery fee',
-            icon: Icons.person_outline_rounded,
-            selected: !_shared,
-            onTap: () => setState(() => _shared = false),
-            details: const ['Faster checkout', 'No group wait'],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _AddressCard(grocery: grocery),
+          _AddressCard(),
           const SizedBox(height: AppSpacing.lg),
           _BillDetails(
             total: total,
@@ -195,9 +133,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             packagingFee: packagingFee,
             deliveryFee: deliveryFee,
             couponDiscount: couponDiscount,
-            sharedSavings: savings,
             payable: payable,
-            grocery: grocery,
           ),
         ],
       ),
@@ -238,13 +174,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     final authenticated = ref
                         .read(appControllerProvider)
                         .authenticated;
+                    final route = _checkoutRoute(_instructions.text);
                     if (authenticated) {
-                      context.push('/checkout?shared=$_shared');
+                      context.push(route);
                     } else {
-                      ProtectedActionSheet.show(
-                        context,
-                        '/checkout?shared=$_shared',
-                      );
+                      ProtectedActionSheet.show(context, route);
                     }
                   },
                 ),
@@ -256,51 +190,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     );
   }
 
-  Future<void> _showCoupons(BuildContext context) async {
-    final applied = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Available coupons',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              for (final coupon in const [
-                ('WELCOME50', 'Save ₹50 on your first eligible order'),
-                ('FRESH20', '20% off on fresh produce'),
-              ])
-                Card(
-                  child: ListTile(
-                    title: Text(
-                      coupon.$1,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    subtitle: Text(coupon.$2),
-                    trailing: TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('APPLY'),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (mounted && applied == true) {
-      setState(() => _couponApplied = true);
-    }
-  }
+}
+
+String _checkoutRoute(String instructions) {
+  final trimmed = instructions.trim();
+  if (trimmed.isEmpty) return '/checkout';
+  return '/checkout?instructions=${Uri.encodeQueryComponent(trimmed)}';
 }
 
 class _CartLineTile extends ConsumerWidget {
@@ -332,8 +227,17 @@ class _CartLineTile extends ConsumerWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 5),
+              if (line.optionsLabel.isNotEmpty) ...[
+                Text(
+                  line.optionsLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 3),
+              ],
               Text(
-                '₹${line.item.price} each',
+                '₹${line.selection.unitPrice} each',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -374,139 +278,18 @@ class _CartLineTile extends ConsumerWidget {
   }
 }
 
-class _CheckoutChoice extends StatelessWidget {
-  const _CheckoutChoice({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    this.badge,
-    this.details = const [],
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  final String? badge;
-  final List<String> details;
+class _AddressCard extends ConsumerWidget {
+  const _AddressCard();
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.primaryVeryLight : AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: selected ? AppColors.primary : AppColors.border,
-          width: selected ? 1.5 : 1,
-        ),
-        boxShadow: selected
-            ? const [
-                BoxShadow(
-                  color: AppColors.shadow,
-                  blurRadius: 18,
-                  offset: Offset(0, 6),
-                ),
-              ]
-            : null,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.cardPadding),
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: selected
-                        ? AppColors.primary
-                        : AppColors.background,
-                    child: Icon(
-                      icon,
-                      color: selected
-                          ? AppColors.surface
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                title,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                            if (badge != null) ...[
-                              const SizedBox(width: AppSpacing.xs),
-                              AppPill(label: badge!),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          subtitle,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Icon(
-                    selected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_off,
-                    color: selected ? AppColors.primary : AppColors.border,
-                  ),
-                ],
-              ),
-              if (details.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Padding(
-                  padding: const EdgeInsets.only(left: 52),
-                  child: Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: [
-                      for (final detail in details)
-                        AppPill(
-                          label: detail,
-                          icon: Icons.check_rounded,
-                          background: selected
-                              ? AppColors.primaryLight
-                              : AppColors.background,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authenticated = ref.watch(
+      appControllerProvider.select((state) => state.authenticated),
     );
-  }
-}
-
-class _AddressCard extends StatelessWidget {
-  const _AddressCard({required this.grocery});
-
-  final bool grocery;
-
-  @override
-  Widget build(BuildContext context) {
+    final addresses = authenticated
+        ? ref.watch(addressesProvider).value ?? const <CustomerAddress>[]
+        : const <CustomerAddress>[];
+    final address = _preferredAddress(addresses);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -520,32 +303,25 @@ class _AddressCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Deliver to Home',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                      Text(
+                        address == null
+                            ? 'Delivery address'
+                            : _addressTitle(address),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
-                        '12, 4th Main Road, Indiranagar',
+                        address?.singleLine ??
+                            'Confirm your address before placing the order',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),
                 ),
-                TextButton(onPressed: () {}, child: const Text('Change')),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                const Icon(Icons.schedule_rounded, color: AppColors.dark),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    grocery
-                        ? 'Delivery in 12–15 minutes'
-                        : 'Delivery by 8:12 PM',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                TextButton(
+                  onPressed: () => context.push(
+                    '/info/${Uri.encodeComponent('Saved Addresses')}',
                   ),
+                  child: const Text('Change'),
                 ),
               ],
             ),
@@ -556,6 +332,18 @@ class _AddressCard extends StatelessWidget {
   }
 }
 
+CustomerAddress? _preferredAddress(List<CustomerAddress> addresses) {
+  for (final address in addresses) {
+    if (address.isDefault) return address;
+  }
+  return addresses.isEmpty ? null : addresses.first;
+}
+
+String _addressTitle(CustomerAddress address) {
+  final label = address.label.trim();
+  return label.isEmpty ? 'Deliver to saved address' : 'Deliver to $label';
+}
+
 class _BillDetails extends StatelessWidget {
   const _BillDetails({
     required this.total,
@@ -564,9 +352,7 @@ class _BillDetails extends StatelessWidget {
     required this.packagingFee,
     required this.deliveryFee,
     required this.couponDiscount,
-    required this.sharedSavings,
     required this.payable,
-    required this.grocery,
   });
 
   final int total;
@@ -575,9 +361,7 @@ class _BillDetails extends StatelessWidget {
   final int packagingFee;
   final int deliveryFee;
   final int couponDiscount;
-  final int sharedSavings;
   final int payable;
-  final bool grocery;
 
   @override
   Widget build(BuildContext context) {
@@ -603,16 +387,9 @@ class _BillDetails extends StatelessWidget {
                 '−₹$couponDiscount',
                 valueColor: AppColors.success,
               ),
-            if (sharedSavings > 0)
-              _row(
-                grocery ? 'Share Basket saving' : 'FoodShare saving',
-                '−₹$sharedSavings',
-                valueColor: AppColors.success,
-              ),
-            _row('Wallet balance applied', '₹0'),
             const Divider(height: 24),
             _row('To pay', '₹$payable', bold: true),
-            if (sharedSavings + couponDiscount > 0) ...[
+            if (couponDiscount > 0) ...[
               const SizedBox(height: AppSpacing.xs),
               Container(
                 width: double.infinity,
@@ -622,8 +399,7 @@ class _BillDetails extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'You save ₹${sharedSavings + couponDiscount} with '
-                  '${grocery ? 'Share Basket' : 'FoodShare'}',
+                  'You save ₹$couponDiscount with this order',
                   style: const TextStyle(
                     color: AppColors.success,
                     fontWeight: FontWeight.w600,
@@ -666,9 +442,9 @@ class _BillDetails extends StatelessWidget {
 }
 
 class CheckoutScreen extends ConsumerStatefulWidget {
-  const CheckoutScreen({required this.shared, super.key});
+  const CheckoutScreen({this.instructions = '', super.key});
 
-  final bool shared;
+  final String instructions;
 
   @override
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -697,7 +473,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           .read(checkoutViewModelProvider.notifier)
           .placeOrder(
             idempotencyKey: _idempotencyKey,
-            paymentMethod: 'cod',
+            paymentMethod: grocery ? 'cod' : 'cash',
+            instructions: widget.instructions,
           );
       
       if (!mounted) return;
@@ -734,30 +511,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          if (widget.shared)
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: AppColors.light,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.savings_rounded, color: AppColors.dark),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'You’re saving ₹${bill.value?.discount ?? 0} with a shared order',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 22),
           Text(
             'Select payment method',
             style: Theme.of(context).textTheme.titleLarge,

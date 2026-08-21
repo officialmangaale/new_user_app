@@ -85,13 +85,15 @@ class RestaurantCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${restaurant.deliveryMinutes} min  •  ${restaurant.distanceKm} km  •  ${restaurant.deliveryFee == 0 ? 'Free delivery' : '₹${restaurant.deliveryFee} delivery'}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.textSecondary,
+                    if (_restaurantMeta(restaurant).isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _restaurantMeta(restaurant),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -101,6 +103,16 @@ class RestaurantCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _restaurantMeta(Restaurant restaurant) {
+  final parts = <String>[
+    if (restaurant.deliveryMinutes > 0)
+      '${restaurant.deliveryMinutes} min',
+    if (restaurant.distanceKm > 0) '${restaurant.distanceKm} km',
+    if (restaurant.deliveryFee > 0) '₹${restaurant.deliveryFee} delivery',
+  ];
+  return parts.join('  •  ');
 }
 
 class ProductCard extends StatelessWidget {

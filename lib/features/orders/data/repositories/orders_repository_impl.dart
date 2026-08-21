@@ -111,7 +111,15 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     required String restaurantId,
     required List<CartLine> lines,
     required String idempotencyKey,
-    String? addressId,
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddressLine1,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+    String? deliveryArea,
+    String? deliveryCity,
+    String? deliveryPincode,
+    String? deliveryLandmark,
     String? paymentMethod,
     String? couponCode,
     String? instructions,
@@ -122,15 +130,20 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         options: Options(headers: {'Idempotency-Key': idempotencyKey}),
         data: <String, dynamic>{
           'restaurant_id': _asIntOrString(restaurantId),
-          'items': lines
-              .map(
-                (line) => <String, dynamic>{
-                  'item_id': _asIntOrString(line.item.id),
-                  'quantity': line.quantity,
-                },
-              )
-              .toList(growable: false),
-          'address_id': ?_asIntOrStringOrNull(addressId),
+          'customer': <String, dynamic>{
+            'name': customerName,
+            'phone': customerPhone,
+          },
+          'delivery_address': <String, dynamic>{
+            'address_line1': deliveryAddressLine1,
+            'area': ?deliveryArea,
+            'city': ?deliveryCity,
+            'pincode': ?deliveryPincode,
+            'landmark': ?deliveryLandmark,
+            'latitude': deliveryLatitude,
+            'longitude': deliveryLongitude,
+          },
+          'items': lines.map(_linePayload).toList(growable: false),
           'payment_method': ?paymentMethod,
           'coupon_code': ?couponCode,
           'special_instructions': ?instructions,
@@ -261,17 +274,33 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final order = data['order'];
       final source = order is Map ? Map<String, dynamic>.from(order) : data;
+      final rider = data['rider'];
+      final riderSource =
+          rider is Map ? Map<String, dynamic>.from(rider) : <String, dynamic>{};
+      final riderName = readString(source, const [
+        'rider_name',
+        'delivery_partner',
+      ]);
+      final riderPhone = readString(source, const ['rider_phone']);
       return Result.success(OrderTracking(
         orderId: readString(source, const ['id', 'order_id']),
         status: readString(source, const ['order_status', 'status']),
-        statusLabel: readString(source, const ['status_label', 'label']),
+        statusLabel: readString(source, const [
+          'status_message',
+          'status_label',
+          'label',
+        ]),
         etaMinutes: readInt(source, const [
           'eta_minutes',
           'estimated_minutes',
           'estimated_delivery_minutes',
         ]),
-        riderName: readString(source, const ['rider_name', 'delivery_partner']),
-        riderPhone: readString(source, const ['rider_phone']),
+        riderName: riderName.isNotEmpty
+            ? riderName
+            : readString(riderSource, const ['name', 'rider_name']),
+        riderPhone: riderPhone.isNotEmpty
+            ? riderPhone
+            : readString(riderSource, const ['phone', 'rider_phone']),
       ));
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));

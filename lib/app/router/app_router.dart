@@ -95,7 +95,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/checkout',
         builder: (_, state) => CheckoutScreen(
-          shared: state.uri.queryParameters['shared'] != 'false',
+          instructions: state.uri.queryParameters['instructions'] ?? '',
         ),
       ),
       GoRoute(path: '/orders', builder: (_, _) => const OrdersScreen()),

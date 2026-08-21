@@ -7,6 +7,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../shared/repositories/account_repository.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../account/presentation/profile_screen.dart';
 import '../../app_state/providers/app_controller.dart';
@@ -14,6 +15,7 @@ import '../../account/providers/engagement_providers.dart';
 import '../../catalog/presentation/add_to_cart.dart';
 import '../../catalog/providers/catalog_providers.dart';
 import '../../cart/providers/cart_controller.dart';
+import '../../orders/providers/orders_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 
 class HomeShellScreen extends ConsumerWidget {
@@ -81,6 +83,10 @@ class DeliveryHomeFeed extends ConsumerWidget {
     final state = ref.watch(appControllerProvider);
     final grocery = state.mode == DeliveryMode.grocery;
     final cartVisible = ref.watch(cartCountProvider) > 0;
+    final addresses = state.authenticated
+        ? ref.watch(addressesProvider).value ?? const <CustomerAddress>[]
+        : const <CustomerAddress>[];
+    final selectedAddress = _preferredAddress(addresses);
     return SafeArea(
       bottom: false,
       child: CustomScrollView(
@@ -97,20 +103,21 @@ class DeliveryHomeFeed extends ConsumerWidget {
               children: [
                 AppLocationHeader(
                   mode: state.mode,
-                  onLocationTap: () => _showLocationSheet(context),
+                  locationLabel: _deliveryLocationLabel(selectedAddress),
+                  onLocationTap: () => _showLocationSheet(context, ref),
                   onNotifications: () => context.push('/notifications'),
                 ),
                 const SizedBox(height: AppSpacing.ml),
                 Text(
                   grocery
                       ? 'Fresh picks, right on time'
-                      : 'Good evening, Aarav',
+                      : 'Food delivery near you',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 3),
                 Text(
                   grocery
-                      ? 'Delivery in 20–30 minutes'
+                      ? 'Fresh groceries from nearby stores'
                       : 'What would you like delivered today?',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -140,23 +147,6 @@ class DeliveryHomeFeed extends ConsumerWidget {
             ),
             sliver: SliverList.list(
               children: [
-                PremiumFeatureBanner(
-                  title: grocery
-                      ? 'Freshness meets shared savings'
-                      : 'Great food, better together',
-                  subtitle: grocery
-                      ? 'Unlock up to 12% off with Share Basket'
-                      : 'Join FoodShare and save up to ₹120',
-                  imageUrl: grocery
-                      ? 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=800'
-                      : 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800',
-                  actionLabel: grocery
-                      ? 'Explore baskets'
-                      : 'Explore FoodShare',
-                  onAction: () =>
-                      ref.read(appControllerProvider.notifier).setHomeTab(0),
-                ),
-                const SizedBox(height: AppSpacing.lg),
                 SectionHeader(
                   title: grocery
                       ? 'Share Basket near you'
@@ -193,33 +183,13 @@ class DeliveryHomeFeed extends ConsumerWidget {
     return [
       _sliverHeader(
         context,
-        'Popular near you',
-        'Loved around your neighbourhood',
+        'Restaurants near you',
+        'Open restaurants for your delivery location',
       ),
       SliverToBoxAdapter(child: _RestaurantStrip(restaurants: restaurants)),
       _gap(),
-      _sliverHeader(context, 'Recommended for you', 'Picked for your evening'),
+      _sliverHeader(context, 'Popular near you', 'From the live menu catalog'),
       _productStrip(ref, CatalogItemType.food),
-      _gap(),
-      _sliverHeader(context, 'Reorder your favourites', 'One tap away'),
-      _productStrip(ref, CatalogItemType.food, reversed: true),
-      _gap(),
-      _sliverHeader(context, 'Under 30 minutes', 'Fast local favourites'),
-      SliverToBoxAdapter(
-        child: _RestaurantStrip(
-          restaurants: restaurants.reversed.toList(growable: false),
-        ),
-      ),
-      _gap(),
-      _sliverHeader(context, 'Best rated', 'Consistently delightful'),
-      _productStrip(ref, CatalogItemType.food),
-      _gap(),
-      _sliverHeader(
-        context,
-        'Offers up to 40% off',
-        'Big flavour, lighter bill',
-      ),
-      SliverToBoxAdapter(child: _RestaurantStrip(restaurants: restaurants)),
     ];
   }
 
@@ -330,7 +300,12 @@ class DeliveryHomeFeed extends ConsumerWidget {
   SliverToBoxAdapter _gap() =>
       const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg));
 
-  void _showLocationSheet(BuildContext context) {
+  void _showLocationSheet(BuildContext context, WidgetRef ref) {
+    final authenticated = ref.read(appControllerProvider).authenticated;
+    final addresses = authenticated
+        ? ref.read(addressesProvider).value ?? const <CustomerAddress>[]
+        : const <CustomerAddress>[];
+    final selectedAddress = _preferredAddress(addresses);
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -346,24 +321,45 @@ class DeliveryHomeFeed extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
-              const PremiumSurface(
+              PremiumSurface(
                 child: Row(
                   children: [
-                    Icon(Icons.home_rounded, color: AppColors.primaryDark),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Home',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Text('12, 4th Main Road, Indiranagar'),
-                        ],
-                      ),
+                    const Icon(
+                      Icons.location_on_rounded,
+                      color: AppColors.primaryDark,
                     ),
-                    Icon(Icons.check_circle_rounded, color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: selectedAddress == null
+                          ? const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Current location',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  'Save an address to make checkout faster',
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _addressTitle(selectedAddress),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(selectedAddress.singleLine),
+                              ],
+                            ),
+                    ),
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
@@ -373,6 +369,28 @@ class DeliveryHomeFeed extends ConsumerWidget {
       ),
     );
   }
+}
+
+CustomerAddress? _preferredAddress(List<CustomerAddress> addresses) {
+  for (final address in addresses) {
+    if (address.isDefault) return address;
+  }
+  return addresses.isEmpty ? null : addresses.first;
+}
+
+String _deliveryLocationLabel(CustomerAddress? address) {
+  if (address == null) return 'Use current location';
+  final label = address.label.trim();
+  final area = address.area.trim();
+  if (label.isNotEmpty && area.isNotEmpty) return '$label · $area';
+  if (label.isNotEmpty) return label;
+  if (address.singleLine.isNotEmpty) return address.singleLine;
+  return 'Saved address';
+}
+
+String _addressTitle(CustomerAddress address) {
+  final label = address.label.trim();
+  return label.isEmpty ? 'Delivery address' : 'Deliver to $label';
 }
 
 class _CategoryStrip extends ConsumerStatefulWidget {
@@ -413,7 +431,10 @@ class _CategoryStripState extends ConsumerState<_CategoryStrip> {
             selected: category.key == _selectedKey,
             onTap: () {
               setState(() => _selectedKey = category.key);
-              context.push('/category/${Uri.encodeComponent(category.key)}');
+              context.push(
+                '/category/${Uri.encodeComponent(category.key)}'
+                '?title=${Uri.encodeQueryComponent(category.name)}',
+              );
             },
           );
         },

@@ -8,7 +8,6 @@ import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
-import '../../app_state/providers/app_controller.dart';
 import '../../cart/providers/cart_controller.dart';
 import '../providers/catalog_providers.dart';
 import 'add_to_cart.dart';
@@ -45,21 +44,33 @@ class _RestaurantDetailsScreenState
           discount: 0,
           imageUrl: '',
         );
-    final allItems = [
-      for (final section
-          in ref.watch(restaurantMenuProvider(widget.restaurantId)).value ??
-              const <MenuSection>[])
-        ...section.items,
-    ];
-    final items = allItems
-        .where(
-          (item) =>
-              (!_vegOnly || item.isVeg) &&
-              item.name.toLowerCase().contains(_query.toLowerCase()),
-        )
-        .toList();
+    final menuSections =
+        ref.watch(restaurantMenuProvider(widget.restaurantId)).value ??
+            const <MenuSection>[];
+    final search = _query.trim().toLowerCase();
+    final visibleSections = [
+      for (final section in menuSections)
+        MenuSection(
+          id: section.id,
+          name: section.name.isEmpty ? 'Menu' : section.name,
+          items: section.items
+              .where(
+                (item) =>
+                    (!_vegOnly || item.isVeg) &&
+                    (search.isEmpty ||
+                        item.name.toLowerCase().contains(search) ||
+                        item.subtitle.toLowerCase().contains(search)),
+              )
+              .toList(growable: false),
+        ),
+    ].where((section) => section.items.isNotEmpty).toList(growable: false);
+    final tabs = visibleSections.isEmpty
+        ? const <String>['Menu']
+        : visibleSections
+            .map((section) => section.name)
+            .toList(growable: false);
     return DefaultTabController(
-      length: 5,
+      length: tabs.length,
       child: Scaffold(
         body: NestedScrollView(
           headerSliverBuilder: (context, _) => [
@@ -129,12 +140,13 @@ class _RestaurantDetailsScreenState
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
                         ),
-                        AppPill(
-                          label: '${restaurant.rating}',
-                          icon: Icons.star_rounded,
-                          background: AppColors.successLight,
-                          foreground: const Color(0xFF137333),
-                        ),
+                        if (restaurant.rating > 0)
+                          AppPill(
+                            label: '${restaurant.rating}',
+                            icon: Icons.star_rounded,
+                            background: AppColors.successLight,
+                            foreground: const Color(0xFF137333),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 5),
@@ -142,20 +154,26 @@ class _RestaurantDetailsScreenState
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.schedule_rounded, size: 18),
-                        const SizedBox(width: 5),
-                        Text('${restaurant.deliveryMinutes} min'),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.near_me_outlined, size: 18),
-                        const SizedBox(width: 5),
-                        Text('${restaurant.distanceKm} km'),
+                        if (restaurant.deliveryMinutes > 0) ...[
+                          const Icon(Icons.schedule_rounded, size: 18),
+                          const SizedBox(width: 5),
+                          Text('${restaurant.deliveryMinutes} min'),
+                        ],
+                        if (restaurant.deliveryMinutes > 0 &&
+                            restaurant.distanceKm > 0)
+                          const SizedBox(width: 16),
+                        if (restaurant.distanceKm > 0) ...[
+                          const Icon(Icons.near_me_outlined, size: 18),
+                          const SizedBox(width: 5),
+                          Text('${restaurant.distanceKm} km'),
+                        ],
                       ],
                     ),
                     if (restaurant.foodShare) ...[
                       const SizedBox(height: 14),
                       InkWell(
                         borderRadius: BorderRadius.circular(16),
-                        onTap: () => context.push('/shared/s1'),
+                        onTap: () => context.push('/shared-list?mode=food'),
                         child: PremiumSurface(
                           color: AppColors.primaryVeryLight,
                           borderColor: AppColors.primaryLight,
@@ -176,10 +194,6 @@ class _RestaurantDetailsScreenState
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.dark,
                                       ),
-                                    ),
-                                    Text(
-                                      '3 nearby users are ordering · Save ₹72–₹110',
-                                      style: TextStyle(fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -217,45 +231,54 @@ class _RestaurantDetailsScreenState
                 ),
               ),
             ),
-            const SliverPersistentHeader(
+            SliverPersistentHeader(
               pinned: true,
-              delegate: _TabHeaderDelegate(),
+              delegate: _TabHeaderDelegate(tabs: tabs),
             ),
           ],
           body: TabBarView(
-            children: [
-              for (final _ in List.generate(5, (index) => index))
-                ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return _MenuItemTile(
-                      item: item,
-                      quantity: ref.watch(
-                        cartControllerProvider.select(
-                          (state) => state.quantityForItem(
-                            item.id,
-                            type: item.type,
-                            storeId: item.storeId,
-                          ),
-                        ),
+            children: visibleSections.isEmpty
+                ? const [
+                    EmptyState(
+                      icon: Icons.restaurant_menu_rounded,
+                      title: 'Menu unavailable',
+                      message:
+                          'This restaurant has no online menu items right now.',
+                    ),
+                  ]
+                : [
+                    for (final section in visibleSections)
+                      ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+                        itemCount: section.items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final item = section.items[index];
+                          return _MenuItemTile(
+                            item: item,
+                            quantity: ref.watch(
+                              cartControllerProvider.select(
+                                (state) => state.quantityForItem(
+                                  item.id,
+                                  type: item.type,
+                                  storeId: item.storeId,
+                                ),
+                              ),
+                            ),
+                            onTap: () => context.push('/food-item/${item.id}'),
+                            onAdd: () => addItemToCart(
+                              context,
+                              ref,
+                              item,
+                              restaurantId: widget.restaurantId,
+                            ),
+                            onRemove: () => ref
+                                .read(cartControllerProvider.notifier)
+                                .removeItemById(item.id),
+                          );
+                        },
                       ),
-                      onTap: () => context.push('/food-item/${item.id}'),
-                      onAdd: () => addItemToCart(
-                        context,
-                        ref,
-                        item,
-                        restaurantId: widget.restaurantId,
-                      ),
-                      onRemove: () => ref
-                          .read(cartControllerProvider.notifier)
-                          .removeItemById(item.id),
-                    );
-                  },
-                ),
-            ],
+                  ],
           ),
         ),
         bottomNavigationBar: ref.watch(cartCountProvider) > 0
@@ -277,7 +300,9 @@ class _RestaurantDetailsScreenState
 }
 
 class _TabHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _TabHeaderDelegate();
+  const _TabHeaderDelegate({required this.tabs});
+
+  final List<String> tabs;
 
   @override
   double get minExtent => 48;
@@ -290,23 +315,23 @@ class _TabHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return const ColoredBox(
+    return ColoredBox(
       color: Colors.white,
       child: TabBar(
         isScrollable: true,
-        tabs: [
-          Tab(text: 'Recommended'),
-          Tab(text: 'Bestsellers'),
-          Tab(text: 'Main course'),
-          Tab(text: 'Breads'),
-          Tab(text: 'Beverages'),
-        ],
+        tabs: [for (final tab in tabs) Tab(text: tab)],
       ),
     );
   }
 
   @override
-  bool shouldRebuild(covariant _TabHeaderDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant _TabHeaderDelegate oldDelegate) {
+    if (oldDelegate.tabs.length != tabs.length) return true;
+    for (var i = 0; i < tabs.length; i++) {
+      if (oldDelegate.tabs[i] != tabs[i]) return true;
+    }
+    return false;
+  }
 }
 
 class _MenuItemTile extends StatelessWidget {
@@ -348,15 +373,6 @@ class _MenuItemTile extends StatelessWidget {
                               : AppColors.error,
                           size: 16,
                         ),
-                        if (item.id == 'f1' || item.id == 'f2') ...[
-                          const SizedBox(width: 7),
-                          const AppPill(
-                            label: 'Bestseller',
-                            icon: Icons.local_fire_department_outlined,
-                            background: AppColors.warningLight,
-                            foreground: Color(0xFF8A6100),
-                          ),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -376,27 +392,14 @@ class _MenuItemTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 7),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 15,
-                          color: AppColors.warning,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          '4.7',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Customisable',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: AppColors.primaryDark),
-                        ),
-                      ],
-                    ),
+                    if (item.needsCustomisation) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        'Customisable',
+                        style: Theme.of(context).textTheme.labelSmall
+                            ?.copyWith(color: AppColors.primaryDark),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -441,9 +444,6 @@ class FoodItemDetailsScreen extends ConsumerStatefulWidget {
 }
 
 class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
-  String _size = 'Regular';
-  final Set<String> _addons = {};
-
   @override
   Widget build(BuildContext context) {
     final itemAsync = ref.watch(itemDetailProvider(widget.itemId));
@@ -521,84 +521,46 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 9),
-                Text(
-                  '${item.subtitle}. Prepared fresh with carefully selected ingredients and our signature house seasoning.',
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: AppColors.light,
-                    borderRadius: BorderRadius.circular(17),
+                if (item.subtitle.isNotEmpty) ...[
+                  Text(item.subtitle),
+                  const SizedBox(height: 18),
+                ],
+                if (item.variants.isNotEmpty) ...[
+                  Text(
+                    'Available sizes',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.people_alt_rounded,
-                        color: AppColors.dark,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'FoodShare price preview',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            Text(
-                              'Save another ₹${item.price * item.sharedDiscount ~/ 100} when the group reaches 5 people',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Text(
-                  'Choose size',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                RadioGroup<String>(
-                  groupValue: _size,
-                  onChanged: (value) => setState(() => _size = value!),
-                  child: Column(
-                    children: [
-                      for (final size in const [('Regular', 0), ('Large', 80)])
-                        RadioListTile<String>(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(size.$1),
-                          secondary: Text(
-                            size.$2 == 0 ? 'Included' : '+₹${size.$2}',
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Column(
+                      children: [
+                        for (final variant in item.variants)
+                          ListTile(
+                            title: Text(variant.name),
+                            trailing: Text('₹${variant.price}'),
+                            enabled: variant.isAvailable,
                           ),
-                          value: size.$1,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Text('Add-ons', style: Theme.of(context).textTheme.titleMedium),
-                for (final addon in const [
-                  ('Extra cheese', 49),
-                  ('House dip', 29),
-                  ('Fresh salad', 39),
-                ])
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(addon.$1),
-                    secondary: Text('+₹${addon.$2}'),
-                    value: _addons.contains(addon.$1),
-                    onChanged: (value) => setState(
-                      () => value!
-                          ? _addons.add(addon.$1)
-                          : _addons.remove(addon.$1),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 15),
+                ],
+                if (item.addons.isNotEmpty) ...[
+                  Text('Add-ons', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Column(
+                      children: [
+                        for (final addon in item.addons)
+                          ListTile(
+                            title: Text(addon.name),
+                            trailing: Text('+₹${addon.price}'),
+                            enabled: addon.isAvailable,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 100),
               ],
             ),
@@ -777,16 +739,18 @@ class _GroceryProductDetailsScreenState
             ),
             child: Column(
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.bolt_rounded, color: AppColors.dark),
-                    SizedBox(width: 8),
+                    const Icon(Icons.storefront_rounded, color: AppColors.dark),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Delivery in 12 minutes',
+                        item.store.isEmpty
+                            ? 'Available from selected store'
+                            : 'Available from ${item.store}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           color: AppColors.dark,
                         ),

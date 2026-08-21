@@ -54,12 +54,16 @@ class PremiumSurface extends StatelessWidget {
 class AppLocationHeader extends StatelessWidget {
   const AppLocationHeader({
     required this.mode,
+    this.deliveryLabel,
+    this.locationLabel,
     this.onLocationTap,
     this.onNotifications,
     super.key,
   });
 
   final DeliveryMode mode;
+  final String? deliveryLabel;
+  final String? locationLabel;
   final VoidCallback? onLocationTap;
   final VoidCallback? onNotifications;
 
@@ -81,10 +85,11 @@ class AppLocationHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      grocery ? 'DELIVERY IN 20–30 MIN' : 'DELIVERING TO',
+                      deliveryLabel ??
+                          (grocery ? 'GROCERY DELIVERY' : 'DELIVERING TO'),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         fontSize: 10,
-                        letterSpacing: 0.75,
+                        letterSpacing: 0,
                         color: grocery
                             ? AppColors.primaryDark
                             : AppColors.textMuted,
@@ -101,7 +106,7 @@ class AppLocationHeader extends StatelessWidget {
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            'Home · Indiranagar',
+                            locationLabel ?? 'Use current location',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleSmall,
