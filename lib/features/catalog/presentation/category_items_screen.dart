@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../cart/providers/cart_controller.dart';
@@ -24,16 +25,30 @@ class CategoryItemsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(categoryItemsProvider(categoryKey));
+    final grocery =
+        ref.watch(appControllerProvider).mode == DeliveryMode.grocery;
+    final items = grocery
+        ? ref.watch(groceryCategoryItemsProvider(categoryKey))
+        : ref.watch(categoryItemsProvider(categoryKey));
     return Scaffold(
       appBar: AppBar(title: Text(title.isEmpty ? 'Category' : title)),
       body: AsyncListView(
         value: items,
-        onRetry: () => ref.invalidate(categoryItemsProvider(categoryKey)),
-        empty: const EmptyState(
-          icon: Icons.no_meals_rounded,
+        onRetry: () {
+          if (grocery) {
+            ref.invalidate(groceryCategoryItemsProvider(categoryKey));
+          } else {
+            ref.invalidate(categoryItemsProvider(categoryKey));
+          }
+        },
+        empty: EmptyState(
+          icon: grocery
+              ? Icons.local_grocery_store_outlined
+              : Icons.no_meals_rounded,
           title: 'Nothing here yet',
-          message: 'No dishes are available in this category near you.',
+          message: grocery
+              ? 'No grocery products are available in this category near you.'
+              : 'No dishes are available in this category near you.',
         ),
         builder: (results) => GridView.builder(
           padding: const EdgeInsets.all(AppSpacing.md),
@@ -50,13 +65,21 @@ class CategoryItemsScreen extends ConsumerWidget {
               item: item,
               quantity: ref.watch(
                 cartControllerProvider.select(
-                  (state) => state.quantityForItem(item.id),
+                  (state) => state.quantityForItem(
+                    item.id,
+                    type: item.type,
+                    storeId: item.storeId,
+                  ),
                 ),
               ),
               onAdd: () => addItemToCart(context, ref, item),
               onRemove: () =>
                   ref.read(cartControllerProvider.notifier).removeItemById(item.id),
-              onTap: () => context.push('/food-item/${item.id}'),
+              onTap: () => context.push(
+                item.type == CatalogItemType.grocery
+                    ? '/product/${item.id}'
+                    : '/food-item/${item.id}',
+              ),
             );
           },
         ),

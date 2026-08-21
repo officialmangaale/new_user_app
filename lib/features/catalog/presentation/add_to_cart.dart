@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/models/app_models.dart';
-import '../../app_state/providers/app_controller.dart';
 import '../../cart/providers/cart_controller.dart';
 import 'item_customize_sheet.dart';
 
@@ -20,18 +19,19 @@ Future<void> addItemToCart(
   bool forceCustomise = false,
 }) async {
   final controller = ref.read(cartControllerProvider.notifier);
+  final storeId = restaurantId ?? item.storeId;
 
   if (!item.needsCustomisation) {
-    controller.addItem(item, restaurantId: restaurantId);
+    controller.addItem(item, restaurantId: storeId);
     return;
   }
 
   if (!forceCustomise &&
-      controller.addOrRepeat(item.id, restaurantId: restaurantId)) {
+      controller.addOrRepeat(item.id, restaurantId: storeId)) {
     return;
   }
 
   final selection = await showItemCustomizeSheet(context, item);
   if (selection == null) return;
-  controller.addSelection(selection, restaurantId: restaurantId);
+  controller.addSelection(selection, restaurantId: storeId);
 }

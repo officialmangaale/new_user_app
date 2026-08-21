@@ -24,9 +24,10 @@ class LocationException implements Exception {
 
 /// Resolves the device's current position.
 ///
-/// Location is always optional: `/api/home`, `/api/restaurants` and
-/// `/customer-web/cart/validate` all accept requests without coordinates, so a
-/// denied permission degrades the experience instead of breaking it.
+/// Location is optional for food endpoints: `/api/home`, `/api/restaurants`
+/// and `/customer-web/cart/validate` accept requests without coordinates. The
+/// grocery flow requires coordinates, so callers return an empty nearby grocery
+/// view or a validation message when location is unavailable.
 class LocationService {
   const LocationService();
 

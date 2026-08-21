@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/api_exception.dart';
 import '../../../../shared/models/app_models.dart';
@@ -38,7 +39,32 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       });
       return Result.success(_billSummaryFromJson(data));
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
+    }
+  }
+
+  /// POST /customer-web/grocery/cart/validate — stock-aware grocery totals.
+  Future<Result<BillSummary>> validateGroceryCart({
+    required String groceryMerchantId,
+    required List<CartLine> lines,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+  }) async {
+    try {
+      final data = await _post(
+        '/customer-web/grocery/cart/validate',
+        <String, dynamic>{
+          'grocery_merchant_id': _asIntOrString(groceryMerchantId),
+          'items': lines.map(_groceryLinePayload).toList(growable: false),
+          'delivery_location': <String, dynamic>{
+            'latitude': deliveryLatitude,
+            'longitude': deliveryLongitude,
+          },
+        },
+      );
+      return Result.success(_billSummaryFromJson(data));
+    } on ApiException catch (error) {
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -118,9 +144,62 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         bill: _billSummaryFromJson(data),
       ));
     } on DioException catch (error) {
-      return Result.failure(ApiException.fromDioException(error).message);
+      return Result.failure(
+        Failure.fromApiException(ApiException.fromDioException(error)),
+      );
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
+    }
+  }
+
+  /// POST /customer-web/grocery/orders — COD grocery checkout.
+  Future<Result<PlacedOrder>> placeGroceryOrder({
+    required String groceryMerchantId,
+    required List<CartLine> lines,
+    required String idempotencyKey,
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddress,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+    String? deliveryLandmark,
+    String? paymentMethod,
+    String? instructions,
+  }) async {
+    try {
+      final response = await _client.restaurant.post<dynamic>(
+        '/customer-web/grocery/orders',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+        data: <String, dynamic>{
+          'grocery_merchant_id': _asIntOrString(groceryMerchantId),
+          'customer_name': customerName,
+          'customer_phone': customerPhone,
+          'payment_method': paymentMethod ?? 'cod',
+          'delivery_address': deliveryAddress,
+          'delivery_landmark': ?deliveryLandmark,
+          'delivery_latitude': deliveryLatitude,
+          'delivery_longitude': deliveryLongitude,
+          'items': lines.map(_groceryLinePayload).toList(growable: false),
+          'notes': ?instructions,
+        },
+      );
+      final data = unwrapApiObject(response.data);
+      return Result.success(PlacedOrder(
+        orderId: readString(data, const ['grocery_order_id', 'id', 'order_id']),
+        orderNumber: readString(data, const [
+          'order_number',
+          'display_number',
+          'grocery_order_id',
+        ]),
+        status: readString(data, const ['order_status', 'status']),
+        bill: _billSummaryFromJson(data),
+      ));
+    } on DioException catch (error) {
+      return Result.failure(
+        Failure.fromApiException(ApiException.fromDioException(error)),
+      );
+    } on ApiException catch (error) {
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -149,7 +228,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           .map(_order)
           .toList(growable: false));
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -161,7 +240,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           .map(_order)
           .toList(growable: false));
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -171,7 +250,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       final raw = await _get('/customer-web/orders/$orderId');
       return Result.success(_order(raw is Map ? Map<String, dynamic>.from(raw) : {}));
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -195,7 +274,33 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         riderPhone: readString(source, const ['rider_phone']),
       ));
     } on ApiException catch (error) {
-      return Result.failure(error.message);
+      return Result.failure(Failure.fromApiException(error));
+    }
+  }
+
+  /// GET /customer-web/grocery/orders/:id/track.
+  Future<Result<OrderTracking>> trackGroceryOrder(String orderId) async {
+    try {
+      final raw = await _get('/customer-web/grocery/orders/$orderId/track');
+      final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      return Result.success(OrderTracking(
+        orderId: readString(data, const ['grocery_order_id', 'id', 'order_id']),
+        status: readString(data, const ['order_status', 'status']),
+        statusLabel: readString(data, const [
+          'status_message',
+          'status_label',
+          'label',
+        ]),
+        etaMinutes: readInt(data, const [
+          'eta_minutes',
+          'estimated_minutes',
+          'estimated_delivery_minutes',
+        ]),
+        riderName: readString(data, const ['rider_name', 'delivery_partner']),
+        riderPhone: readString(data, const ['rider_phone']),
+      ));
+    } on ApiException catch (error) {
+      return Result.failure(Failure.fromApiException(error));
     }
   }
 
@@ -334,6 +439,13 @@ Map<String, dynamic> _linePayload(CartLine line) {
             },
           )
           .toList(growable: false),
+  };
+}
+
+Map<String, dynamic> _groceryLinePayload(CartLine line) {
+  return <String, dynamic>{
+    'grocery_product_id': _asIntOrString(line.item.id),
+    'quantity': line.quantity,
   };
 }
 

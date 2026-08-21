@@ -19,6 +19,25 @@ class ValidateCartUseCase {
   }
 }
 
+class ValidateGroceryCartUseCase {
+  const ValidateGroceryCartUseCase(this._repository);
+  final OrdersRepositoryInterface _repository;
+
+  Future<Result<BillSummary>> call({
+    required String groceryMerchantId,
+    required List<CartLine> lines,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+  }) {
+    return _repository.validateGroceryCart(
+      groceryMerchantId: groceryMerchantId,
+      lines: lines,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
+    );
+  }
+}
+
 class PlaceOrderUseCase {
   const PlaceOrderUseCase(this._repository);
   final OrdersRepositoryInterface _repository;
@@ -44,12 +63,50 @@ class PlaceOrderUseCase {
   }
 }
 
+class PlaceGroceryOrderUseCase {
+  const PlaceGroceryOrderUseCase(this._repository);
+  final OrdersRepositoryInterface _repository;
+
+  Future<Result<PlacedOrder>> call({
+    required String groceryMerchantId,
+    required List<CartLine> lines,
+    required String idempotencyKey,
+    required String customerName,
+    required String customerPhone,
+    required String deliveryAddress,
+    required double deliveryLatitude,
+    required double deliveryLongitude,
+    String? deliveryLandmark,
+    String? paymentMethod,
+    String? instructions,
+  }) {
+    return _repository.placeGroceryOrder(
+      groceryMerchantId: groceryMerchantId,
+      lines: lines,
+      idempotencyKey: idempotencyKey,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      deliveryAddress: deliveryAddress,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
+      deliveryLandmark: deliveryLandmark,
+      paymentMethod: paymentMethod,
+      instructions: instructions,
+    );
+  }
+}
+
 class TrackOrderUseCase {
   const TrackOrderUseCase(this._repository);
   final OrdersRepositoryInterface _repository;
 
-  Future<Result<OrderTracking>> call(String orderId) {
-    return _repository.trackOrder(orderId);
+  Future<Result<OrderTracking>> call(
+    String orderId, {
+    DeliveryMode mode = DeliveryMode.food,
+  }) {
+    return mode == DeliveryMode.grocery
+        ? _repository.trackGroceryOrder(orderId)
+        : _repository.trackOrder(orderId);
   }
 }
 

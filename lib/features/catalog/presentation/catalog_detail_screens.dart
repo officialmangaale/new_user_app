@@ -233,7 +233,15 @@ class _RestaurantDetailsScreenState
                     final item = items[index];
                     return _MenuItemTile(
                       item: item,
-                      quantity: ref.watch(cartControllerProvider.select((state) => state.quantityForItem(item.id))),
+                      quantity: ref.watch(
+                        cartControllerProvider.select(
+                          (state) => state.quantityForItem(
+                            item.id,
+                            type: item.type,
+                            storeId: item.storeId,
+                          ),
+                        ),
+                      ),
                       onTap: () => context.push('/food-item/${item.id}'),
                       onAdd: () => addItemToCart(
                         context,
@@ -454,7 +462,13 @@ class _FoodItemDetailsScreenState extends ConsumerState<FoodItemDetailsScreen> {
       ),
       data: (item) {
         final quantity = ref.watch(
-          cartControllerProvider.select((state) => state.quantityForItem(item.id)),
+          cartControllerProvider.select(
+            (state) => state.quantityForItem(
+              item.id,
+              type: item.type,
+              storeId: item.storeId,
+            ),
+          ),
         );
         return Scaffold(
       body: CustomScrollView(
@@ -645,7 +659,7 @@ class _GroceryProductDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    final itemAsync = ref.watch(itemDetailProvider(widget.itemId));
+    final itemAsync = ref.watch(groceryProductDetailProvider(widget.itemId));
 
     return itemAsync.when(
       loading: () => const Scaffold(
@@ -661,7 +675,13 @@ class _GroceryProductDetailsScreenState
       ),
       data: (item) {
         final quantity = ref.watch(
-          cartControllerProvider.select((state) => state.quantityForItem(item.id)),
+          cartControllerProvider.select(
+            (state) => state.quantityForItem(
+              item.id,
+              type: item.type,
+              storeId: item.storeId,
+            ),
+          ),
         );
         return Scaffold(
       appBar: AppBar(

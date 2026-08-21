@@ -5,13 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../shared/models/app_models.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'puzzle_game.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
-  const TrackingScreen({required this.orderId, super.key});
+  const TrackingScreen({
+    required this.orderId,
+    this.mode = DeliveryMode.food,
+    super.key,
+  });
 
   final String orderId;
+  final DeliveryMode mode;
 
   @override
   ConsumerState<TrackingScreen> createState() => _TrackingScreenState();
@@ -33,13 +39,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   Timer? _pollTimer;
   Timer? _alertTimer;
 
+  OrderTrackingRequest get _request => OrderTrackingRequest(
+        orderId: widget.orderId,
+        mode: widget.mode,
+      );
+
   @override
   void initState() {
     super.initState();
     // Polling, not a socket: the app has no WebSocket dependency, and the
     // backend order stream would need one. 15 s matches the KDS fallback.
     _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) ref.invalidate(orderTrackingProvider(widget.orderId));
+      if (mounted) ref.invalidate(orderTrackingProvider(_request));
     });
   }
 
@@ -55,8 +66,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   /// seven-step timeline.
   int _indexForStatus(String status) => switch (status.toLowerCase()) {
     'pending' || 'confirmed' || 'accepted' || 'placed' => 0,
-    'preparing' => 1,
-    'ready' || 'ready_to_serve' => 2,
+    'preparing' || 'packing' => 1,
+    'ready' || 'ready_to_serve' || 'packed' => 2,
     'picked_up' => 3,
     'out_for_delivery' || 'on_the_way' => 4,
     'delivered' || 'completed' || 'done' => 6,
@@ -82,7 +93,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final tracking = ref.watch(orderTrackingProvider(widget.orderId));
+    final tracking = ref.watch(orderTrackingProvider(_request));
     final live = tracking.value;
     if (live != null) _syncStatus(live.status);
 

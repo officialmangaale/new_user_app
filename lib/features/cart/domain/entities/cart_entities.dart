@@ -18,7 +18,13 @@ class CartSelection {
   /// Stable, order-independent identity for this configuration.
   String get lineId {
     final addonIds = addons.map((addon) => addon.id).toList()..sort();
-    return [item.id, variant?.id ?? '', addonIds.join('+')].join('|');
+    return [
+      item.type.name,
+      item.storeId,
+      item.id,
+      variant?.id ?? '',
+      addonIds.join('+'),
+    ].join('|');
   }
 
   /// Unit price: the variant replaces the base price, addons add on top.

@@ -53,12 +53,38 @@ final restaurantsProvider = FutureProvider<List<Restaurant>>((ref) async {
   return _unwrap(result);
 });
 
+final groceryMerchantsProvider = FutureProvider<List<Restaurant>>((ref) async {
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) return const <Restaurant>[];
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryMerchants(
+        lat: location.latitude,
+        lng: location.longitude,
+      );
+  return _unwrap(result);
+});
+
+final nearestGroceryMerchantProvider = FutureProvider<Restaurant?>((ref) async {
+  final merchants = await ref.watch(groceryMerchantsProvider.future);
+  return merchants.isEmpty ? null : merchants.first;
+});
+
 /// Home category rail, scoped to the device location when available.
 final categoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
   final location = await ref.watch(currentLocationProvider.future);
   final result = await ref
       .watch(fetchCategoriesUseCaseProvider)
       .call(lat: location?.latitude, lng: location?.longitude);
+  return _unwrap(result);
+});
+
+final groceryCategoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
+  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
+  if (merchant == null) return const <HomeCategory>[];
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryCategories(merchant.id);
   return _unwrap(result);
 });
 
@@ -76,6 +102,71 @@ final categoryItemsProvider = FutureProvider.family<List<CatalogItem>, String>((
         lng: location?.longitude,
       );
   return _unwrap(result);
+});
+
+final nearbyGroceryProductsProvider = FutureProvider<List<CatalogItem>>((
+  ref,
+) async {
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) return const <CatalogItem>[];
+  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
+  if (merchant == null) return const <CatalogItem>[];
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryProducts(
+        merchant.id,
+        lat: location.latitude,
+        lng: location.longitude,
+        merchantName: merchant.name,
+      );
+  return _unwrap(result);
+});
+
+final groceryCategoryItemsProvider =
+    FutureProvider.family<List<CatalogItem>, String>((ref, categoryId) async {
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) return const <CatalogItem>[];
+  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
+  if (merchant == null) return const <CatalogItem>[];
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryProducts(
+        merchant.id,
+        lat: location.latitude,
+        lng: location.longitude,
+        merchantName: merchant.name,
+        categoryId: categoryId,
+      );
+  return _unwrap(result);
+});
+
+final grocerySearchResultsProvider =
+    FutureProvider.family<List<CatalogItem>, String>((ref, query) async {
+  final trimmed = query.trim();
+  if (trimmed.length < 2) return const <CatalogItem>[];
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) return const <CatalogItem>[];
+  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
+  if (merchant == null) return const <CatalogItem>[];
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryProducts(
+        merchant.id,
+        lat: location.latitude,
+        lng: location.longitude,
+        merchantName: merchant.name,
+        search: trimmed,
+      );
+  return _unwrap(result);
+});
+
+final groceryProductDetailProvider =
+    FutureProvider.family<CatalogItem, String>((ref, productId) async {
+  final products = await ref.watch(nearbyGroceryProductsProvider.future);
+  for (final product in products) {
+    if (product.id == productId) return product;
+  }
+  throw Exception('This grocery product is not available near you right now.');
 });
 
 /// Cross-restaurant search. Empty query returns nothing rather than the whole

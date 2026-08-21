@@ -31,15 +31,16 @@ class RestaurantCard extends StatelessWidget {
                     width: 275,
                     height: 140,
                   ),
-                  Positioned(
-                    left: 10,
-                    top: 10,
-                    child: AppPill(
-                      label: '${restaurant.discount}% OFF',
-                      background: AppColors.dark,
-                      foreground: Colors.white,
+                  if (restaurant.discount > 0)
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: AppPill(
+                        label: '${restaurant.discount}% OFF',
+                        background: AppColors.dark,
+                        foreground: Colors.white,
+                      ),
                     ),
-                  ),
                   if (restaurant.foodShare)
                     const Positioned(
                       right: 10,
@@ -65,15 +66,17 @@ class RestaurantCard extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
-                        const Icon(
-                          Icons.star_rounded,
-                          color: AppColors.success,
-                          size: 18,
-                        ),
-                        Text(
-                          '${restaurant.rating}',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
+                        if (restaurant.rating > 0) ...[
+                          const Icon(
+                            Icons.star_rounded,
+                            color: AppColors.success,
+                            size: 18,
+                          ),
+                          Text(
+                            '${restaurant.rating}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),

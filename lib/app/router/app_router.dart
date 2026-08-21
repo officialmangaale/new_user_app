@@ -101,8 +101,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/orders', builder: (_, _) => const OrdersScreen()),
       GoRoute(
         path: '/tracking/:id',
-        builder: (_, state) =>
-            TrackingScreen(orderId: state.pathParameters['id']!),
+        builder: (_, state) => TrackingScreen(
+          orderId: state.pathParameters['id']!,
+          mode: _modeFrom(state.uri.queryParameters['mode']),
+        ),
       ),
       GoRoute(path: '/wallet', builder: (_, _) => const WalletScreen()),
       GoRoute(path: '/referral', builder: (_, _) => const ReferralScreen()),

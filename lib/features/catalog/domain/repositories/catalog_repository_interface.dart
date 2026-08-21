@@ -18,6 +18,14 @@ abstract interface class CatalogRepositoryInterface {
     int limit = 20,
   });
 
+  /// Fetches nearby grocery merchants for the customer's delivery location.
+  Future<Result<List<Restaurant>>> fetchGroceryMerchants({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+    int limit = 20,
+  });
+
   /// Fetches detailed information for a specific restaurant.
   Future<Result<Restaurant>> fetchRestaurantDetail(String restaurantId);
 
@@ -34,6 +42,9 @@ abstract interface class CatalogRepositoryInterface {
     double radiusKm = 7,
   });
 
+  /// Fetches grocery categories for one merchant.
+  Future<Result<List<HomeCategory>>> fetchGroceryCategories(String merchantId);
+
   /// Fetches items that belong to a specific category.
   Future<Result<List<CatalogItem>>> fetchCategoryItems(
     String categoryKey, {
@@ -41,6 +52,16 @@ abstract interface class CatalogRepositoryInterface {
     double? lng,
     int page = 1,
     int limit = 20,
+  });
+
+  /// Fetches grocery products for one merchant, optionally scoped to a category.
+  Future<Result<List<CatalogItem>>> fetchGroceryProducts(
+    String merchantId, {
+    required double lat,
+    required double lng,
+    String? merchantName,
+    String? categoryId,
+    String? search,
   });
 
   /// Searches restaurants by query.

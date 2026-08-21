@@ -224,6 +224,8 @@ class DeliveryHomeFeed extends ConsumerWidget {
   }
 
   List<Widget> _grocerySections(BuildContext context, WidgetRef ref) {
+    final merchants =
+        ref.watch(groceryMerchantsProvider).value ?? const <Restaurant>[];
     const titles = [
       ('Daily essentials', 'Everything you need today'),
       ('Buy again', 'Your regulars, ready to add'),
@@ -236,6 +238,15 @@ class DeliveryHomeFeed extends ConsumerWidget {
       ('Recommended for you', 'Selected for your household'),
     ];
     return [
+      _sliverHeader(
+        context,
+        'Grocery stores near you',
+        'Closest open shops for your delivery location',
+      ),
+      SliverToBoxAdapter(
+        child: _RestaurantStrip(restaurants: merchants, grocery: true),
+      ),
+      _gap(),
       for (var i = 0; i < titles.length; i++) ...[
         _sliverHeader(context, titles[i].$1, titles[i].$2),
         _productStrip(ref, CatalogItemType.grocery, reversed: i.isOdd),
@@ -271,11 +282,12 @@ class DeliveryHomeFeed extends ConsumerWidget {
     CatalogItemType type, {
     bool reversed = false,
   }) {
-    var items =
-        (ref.watch(homeFeedProvider).value?.featuredItems ??
-                const <CatalogItem>[])
-            .where((item) => item.type == type)
-            .toList();
+    final source = type == CatalogItemType.grocery
+        ? ref.watch(nearbyGroceryProductsProvider).value ??
+            const <CatalogItem>[]
+        : ref.watch(homeFeedProvider).value?.featuredItems ??
+            const <CatalogItem>[];
+    var items = source.where((item) => item.type == type).toList();
     if (reversed) items = items.reversed.toList();
     return SliverToBoxAdapter(
       child: SizedBox(
@@ -291,7 +303,15 @@ class DeliveryHomeFeed extends ConsumerWidget {
             final item = items[index];
             return ProductCard(
               item: item,
-              quantity: ref.watch(cartControllerProvider.select((state) => state.quantityForItem(item.id))),
+              quantity: ref.watch(
+                cartControllerProvider.select(
+                  (state) => state.quantityForItem(
+                    item.id,
+                    type: item.type,
+                    storeId: item.storeId,
+                  ),
+                ),
+              ),
               onAdd: () => addItemToCart(context, ref, item),
               onRemove: () =>
                   ref.read(cartControllerProvider.notifier).removeItemById(item.id),
@@ -369,8 +389,10 @@ class _CategoryStripState extends ConsumerState<_CategoryStrip> {
 
   @override
   Widget build(BuildContext context) {
-    final categories =
-        ref.watch(categoriesProvider).value ?? const <HomeCategory>[];
+    final categories = (widget.grocery
+            ? ref.watch(groceryCategoriesProvider)
+            : ref.watch(categoriesProvider))
+        .value ?? const <HomeCategory>[];
     if (categories.isEmpty) return const SizedBox(height: 112);
 
     return SizedBox(
@@ -436,9 +458,10 @@ class _HomeGroupStrip extends ConsumerWidget {
 }
 
 class _RestaurantStrip extends StatelessWidget {
-  const _RestaurantStrip({required this.restaurants});
+  const _RestaurantStrip({required this.restaurants, this.grocery = false});
 
   final List<Restaurant> restaurants;
+  final bool grocery;
 
   @override
   Widget build(BuildContext context) {
@@ -453,7 +476,9 @@ class _RestaurantStrip extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
         itemBuilder: (_, index) => RestaurantCard(
           restaurant: restaurants[index],
-          onTap: () => context.push('/restaurant/${restaurants[index].id}'),
+          onTap: grocery
+              ? null
+              : () => context.push('/restaurant/${restaurants[index].id}'),
         ),
       ),
     );

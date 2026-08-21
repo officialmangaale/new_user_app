@@ -7,7 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
+import '../../app_state/providers/app_controller.dart';
+import '../../cart/providers/cart_controller.dart';
+import 'add_to_cart.dart';
 import '../providers/catalog_providers.dart';
 
 /// Global search across restaurants, backed by `/customer-web/search`.
@@ -51,6 +55,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final grocery =
+        ref.watch(appControllerProvider).mode == DeliveryMode.grocery;
     return Scaffold(
       appBar: AppBar(
         title: TextField(
@@ -60,7 +66,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           onChanged: _onChanged,
           onSubmitted: (value) => setState(() => _query = value.trim()),
           decoration: InputDecoration(
-            hintText: 'Search dishes or restaurants…',
+            hintText: grocery
+                ? 'Search milk, fruits, snacks…'
+                : 'Search dishes or restaurants…',
             border: InputBorder.none,
             suffixIcon: _controller.text.isEmpty
                 ? null
@@ -75,32 +83,88 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       ),
       body: _query.length < 2
-          ? const EmptyState(
+          ? EmptyState(
               icon: Icons.search_rounded,
-              title: 'Find something to eat',
-              message: 'Type at least two letters to search restaurants.',
+              title: grocery ? 'Find daily essentials' : 'Find something to eat',
+              message: grocery
+                  ? 'Type at least two letters to search nearby grocery products.'
+                  : 'Type at least two letters to search restaurants.',
             )
-          : AsyncListView(
-              value: ref.watch(searchResultsProvider(_query)),
-              onRetry: () => ref.invalidate(searchResultsProvider(_query)),
-              empty: EmptyState(
-                icon: Icons.search_off_rounded,
-                title: 'No matches for “$_query”',
-                message: 'Try a different dish, cuisine or restaurant name.',
-              ),
-              builder: (restaurants) => ListView.separated(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                itemCount: restaurants.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final restaurant = restaurants[index];
-                  return RestaurantCard(
-                    restaurant: restaurant,
-                    onTap: () => context.push('/restaurant/${restaurant.id}'),
-                  );
-                },
+          : grocery
+              ? _GrocerySearchResults(query: _query)
+              : AsyncListView(
+                  value: ref.watch(searchResultsProvider(_query)),
+                  onRetry: () =>
+                      ref.invalidate(searchResultsProvider(_query)),
+                  empty: EmptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'No matches for “$_query”',
+                    message:
+                        'Try a different dish, cuisine or restaurant name.',
+                  ),
+                  builder: (restaurants) => ListView.separated(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    itemCount: restaurants.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final restaurant = restaurants[index];
+                      return RestaurantCard(
+                        restaurant: restaurant,
+                        onTap: () =>
+                            context.push('/restaurant/${restaurant.id}'),
+                      );
+                    },
+                  ),
+                ),
+    );
+  }
+}
+
+class _GrocerySearchResults extends ConsumerWidget {
+  const _GrocerySearchResults({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AsyncListView(
+      value: ref.watch(grocerySearchResultsProvider(query)),
+      onRetry: () => ref.invalidate(grocerySearchResultsProvider(query)),
+      empty: EmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'No matches for “$query”',
+        message: 'Try a different product, brand or grocery keyword.',
+      ),
+      builder: (products) => GridView.builder(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220,
+          mainAxisExtent: 278,
+          crossAxisSpacing: AppSpacing.sm,
+          mainAxisSpacing: AppSpacing.sm,
+        ),
+        itemCount: products.length,
+        itemBuilder: (context, index) {
+          final item = products[index];
+          return ProductCard(
+            item: item,
+            quantity: ref.watch(
+              cartControllerProvider.select(
+                (state) => state.quantityForItem(
+                  item.id,
+                  type: item.type,
+                  storeId: item.storeId,
+                ),
               ),
             ),
+            onAdd: () => addItemToCart(context, ref, item),
+            onRemove: () => ref
+                .read(cartControllerProvider.notifier)
+                .removeItemById(item.id),
+            onTap: () => context.push('/product/${item.id}'),
+          );
+        },
+      ),
     );
   }
 }

@@ -69,6 +69,8 @@ class CatalogItem {
     required this.originalPrice,
     required this.imageUrl,
     required this.type,
+    this.storeId = '',
+    this.categoryId = '',
     this.isVeg = true,
     this.sharedDiscount = 0,
     this.variants = const [],
@@ -83,6 +85,8 @@ class CatalogItem {
   final int originalPrice;
   final String imageUrl;
   final CatalogItemType type;
+  final String storeId;
+  final String categoryId;
   final bool isVeg;
   final int sharedDiscount;
 

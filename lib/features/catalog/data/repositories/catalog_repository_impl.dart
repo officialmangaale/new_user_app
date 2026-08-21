@@ -78,6 +78,29 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
   }
 
   @override
+  Future<Result<List<Restaurant>>> fetchGroceryMerchants({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+    int limit = 20,
+  }) {
+    return _run(() async {
+      final raw = await _get(
+        '/customer-web/grocery/merchants',
+        query: <String, dynamic>{
+          'lat': lat,
+          'lng': lng,
+          'radius_km': radiusKm,
+          'limit': limit,
+        },
+      );
+      return listFrom(raw, keys: const ['merchants', 'items', 'results'])
+          .map(_groceryMerchant)
+          .toList(growable: false);
+    });
+  }
+
+  @override
   Future<Result<Restaurant>> fetchRestaurantDetail(String restaurantId) {
     return _run(() async {
       final data = await _getObject('/restaurants/public/$restaurantId');
@@ -106,7 +129,13 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
                 id: readString(category, const ['id']),
                 name: readString(category, const ['name']),
                 items: readList(category, 'items')
-                    .map((item) => _catalogItem(item, storeName: storeName))
+                    .map(
+                      (item) => _catalogItem(
+                        item,
+                        storeName: storeName,
+                        storeId: restaurantId,
+                      ),
+                    )
                     .toList(growable: false),
               ),
             )
@@ -122,7 +151,13 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           id: 'all',
           name: 'Menu',
           items: items
-              .map((item) => _catalogItem(item, storeName: storeName))
+              .map(
+                (item) => _catalogItem(
+                  item,
+                  storeName: storeName,
+                  storeId: restaurantId,
+                ),
+              )
               .toList(growable: false),
         ),
       ];
@@ -163,6 +198,33 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
   }
 
   @override
+  Future<Result<List<HomeCategory>>> fetchGroceryCategories(String merchantId) {
+    return _run(() async {
+      final raw = await _get(
+        '/customer-web/grocery/merchants/$merchantId/categories',
+      );
+      return listFrom(raw, keys: const ['categories', 'items', 'data'])
+          .map(
+            (json) => HomeCategory(
+              key: readString(json, const [
+                'grocery_category_id',
+                'id',
+                'category_id',
+              ]),
+              name: readString(json, const ['name', 'category_name', 'title']),
+              imageUrl: readString(json, const ['image_url', 'imageUrl']),
+              icon: 'grocery',
+              itemCount: 0,
+            ),
+          )
+          .where(
+            (category) => category.name.isNotEmpty && category.key.isNotEmpty,
+          )
+          .toList(growable: false);
+    });
+  }
+
+  @override
   Future<Result<List<CatalogItem>>> fetchCategoryItems(
     String categoryKey, {
     double? lat,
@@ -182,6 +244,33 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       );
       return listFrom(raw, keys: const ['items', 'results'])
           .map((json) => _catalogItem(json))
+          .toList(growable: false);
+    });
+  }
+
+  @override
+  Future<Result<List<CatalogItem>>> fetchGroceryProducts(
+    String merchantId, {
+    required double lat,
+    required double lng,
+    String? merchantName,
+    String? categoryId,
+    String? search,
+  }) {
+    return _run(() async {
+      final raw = await _get(
+        '/customer-web/grocery/merchants/$merchantId/products',
+        query: <String, dynamic>{
+          'lat': lat,
+          'lng': lng,
+          if (categoryId != null && categoryId.isNotEmpty)
+            'category_id': categoryId,
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+        },
+      );
+      return listFrom(raw, keys: const ['products', 'items', 'results'])
+          .map((json) => _groceryProduct(json, storeName: merchantName))
           .toList(growable: false);
     });
   }
@@ -255,7 +344,11 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
     );
   }
 
-  CatalogItem _catalogItem(Map<String, dynamic> json, {String? storeName}) {
+  CatalogItem _catalogItem(
+    Map<String, dynamic> json, {
+    String? storeName,
+    String? storeId,
+  }) {
     final price = readDouble(json, const ['price']).round();
     final original = readDouble(json, const [
       'original_price',
@@ -272,6 +365,7 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       originalPrice: original > price ? original : price,
       imageUrl: readString(json, const ['image_url', 'image']),
       type: CatalogItemType.food,
+      storeId: storeId ?? readString(json, const ['restaurant_id', 'store_id']),
       isVeg: json['is_veg'] == true || json['is_vegetarian'] == true,
       variants: readList(json, 'variants')
           .map(
@@ -305,6 +399,67 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           .toList(growable: false),
     );
   }
+
+  Restaurant _groceryMerchant(Map<String, dynamic> json) {
+    final availableProducts = readInt(json, const [
+      'available_products_count',
+      'products_count',
+      'item_count',
+    ]);
+    final description = readString(json, const ['description']);
+    final distance = readDouble(json, const ['distance_km', 'distance']);
+    return Restaurant(
+      id: readString(json, const ['grocery_merchant_id', 'merchant_id', 'id']),
+      name: readString(json, const ['name', 'store_name']),
+      cuisine: description.isNotEmpty
+          ? description
+          : availableProducts > 0
+              ? '$availableProducts products available'
+              : 'Daily essentials',
+      rating: readDouble(json, const ['rating', 'average_rating']),
+      deliveryMinutes: _readGroceryDeliveryMinutes(json),
+      distanceKm: distance,
+      deliveryFee: readDouble(json, const [
+        'delivery_fee',
+        'delivery_charge',
+      ]).round(),
+      discount: 0,
+      imageUrl: readString(json, const [
+        'banner_url',
+        'logo_url',
+        'image_url',
+      ]),
+    );
+  }
+
+  CatalogItem _groceryProduct(
+    Map<String, dynamic> json, {
+    String? storeName,
+  }) {
+    final price = readDouble(json, const ['selling_price', 'price']).round();
+    final original = readDouble(json, const ['mrp', 'original_price']).round();
+    return CatalogItem(
+      id: readString(json, const ['grocery_product_id', 'product_id', 'id']),
+      name: readString(json, const ['name', 'product_name']),
+      subtitle: _groceryProductSubtitle(json),
+      store: storeName ??
+          readString(json, const ['merchant_name', 'store', 'store_name']),
+      price: price,
+      originalPrice: original > price ? original : price,
+      imageUrl: readString(json, const ['image_url', 'image']),
+      type: CatalogItemType.grocery,
+      storeId: readString(json, const [
+        'grocery_merchant_id',
+        'merchant_id',
+        'store_id',
+      ]),
+      categoryId: readString(json, const [
+        'grocery_category_id',
+        'category_id',
+      ]),
+      isVeg: true,
+    );
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -336,4 +491,26 @@ int _readDeliveryMinutes(Map<String, dynamic> json) {
     }
   }
   return 0;
+}
+
+int _readGroceryDeliveryMinutes(Map<String, dynamic> json) {
+  final explicit = readInt(json, const [
+    'delivery_minutes',
+    'estimated_delivery_minutes',
+  ]);
+  if (explicit > 0) return explicit;
+  final deliveryTime = readString(json, const ['delivery_time']);
+  final match = RegExp(r'\d+').firstMatch(deliveryTime);
+  if (match != null) return int.tryParse(match.group(0) ?? '') ?? 30;
+  return 30;
+}
+
+String _groceryProductSubtitle(Map<String, dynamic> json) {
+  final parts = <String>[
+    readString(json, const ['brand']),
+    readString(json, const ['package_size']),
+    readString(json, const ['unit']),
+  ].where((part) => part.isNotEmpty).toList(growable: false);
+  if (parts.isNotEmpty) return parts.join(' • ');
+  return readString(json, const ['description', 'subtitle']);
 }

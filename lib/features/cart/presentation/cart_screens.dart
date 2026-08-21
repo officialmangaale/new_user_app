@@ -691,6 +691,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Future<void> _placeOrder() async {
     setState(() => _paying = true);
     try {
+      final grocery = ref.read(cartLinesProvider).first.item.type ==
+          CatalogItemType.grocery;
       final result = await ref
           .read(checkoutViewModelProvider.notifier)
           .placeOrder(
@@ -701,7 +703,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       if (!mounted) return;
       
       result.when(
-        success: (placed) => context.go('/tracking/${placed.orderId}'),
+        success: (placed) => context.go(
+          grocery
+              ? '/tracking/${placed.orderId}?mode=grocery'
+              : '/tracking/${placed.orderId}',
+        ),
         failure: (failure) => _showError(failure.message),
       );
     } finally {
