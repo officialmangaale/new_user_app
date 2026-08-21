@@ -1,4 +1,4 @@
-import '../../catalog/domain/entities/catalog_entities.dart';
+import '../../../catalog/domain/entities/catalog_entities.dart';
 
 /// One configured cart entry: an item plus the exact options chosen.
 ///

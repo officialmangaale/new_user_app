@@ -8,12 +8,8 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/error/failures.dart';
-import '../../../../core/services/api_exception.dart';
 import '../../domain/entities/auth_entities.dart';
-import '../../domain/usecases/request_otp_usecase.dart';
-import '../../domain/usecases/verify_otp_usecase.dart';
-import '../providers/auth_providers.dart';
+import '../../providers/auth_providers.dart';
 
 /// State exposed to the OTP login / verify screens.
 class AuthViewState {

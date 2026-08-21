@@ -47,7 +47,7 @@ sealed class Result<T> {
   }) =>
       switch (this) {
         Success<T>(:final data) => success(data),
-        Fail<T>(:final failure) => failure(failure),
+        Fail<T>(failure: final error) => failure(error),
       };
 
   /// Transforms the success payload, leaving failures untouched.

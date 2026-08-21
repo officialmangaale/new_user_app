@@ -4,17 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/di_providers.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/error/result.dart';
 import '../../../shared/models/app_models.dart';
-import '../../orders/providers/orders_providers.dart';
+import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/location_providers.dart';
+import '../../orders/providers/orders_providers.dart';
 import 'cart_controller.dart';
 
 final checkoutViewModelProvider =
-    AutoDisposeAsyncNotifierProvider<CheckoutViewModel, void>(() {
-  return CheckoutViewModel();
-});
+    AsyncNotifierProvider.autoDispose<CheckoutViewModel, void>(
+      CheckoutViewModel.new,
+    );
 
-class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
+class CheckoutViewModel extends AsyncNotifier<void> {
   @override
   FutureOr<void> build() {}
 
@@ -89,7 +91,7 @@ class CheckoutViewModel extends AutoDisposeAsyncNotifier<void> {
     final latitude = location?.latitude ?? address?.latitude ?? 0;
     final longitude = location?.longitude ?? address?.longitude ?? 0;
     final deliveryAddressLine1 = hasSavedAddress
-        ? address!.addressLine1
+        ? address.addressLine1
         : 'Current location';
 
     final result = await ref.read(placeOrderUseCaseProvider)(

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/storage/guest_storage.dart';
 import '../../../shared/models/app_models.dart';
-import '../../authentication/domain/entities/auth_entities.dart';
 
 class AppState {
   const AppState({
@@ -67,12 +66,17 @@ class AppController extends Notifier<AppState> {
   void setHomeTab(int index) => state = state.copyWith(activeHomeTab: index);
 
   /// Persists a verified customer session from user-service.
-  Future<void> completeLogin(AuthSession session) async {
+  Future<void> completeLogin({
+    required String authToken,
+    required String userId,
+    required String name,
+    required String phone,
+  }) async {
     await _authStorage.saveSession(
-      token: session.authToken,
-      userId: session.user.userId,
-      name: session.user.name,
-      phone: session.user.phone,
+      token: authToken,
+      userId: userId,
+      name: name,
+      phone: phone,
     );
     await _storage.setAuthenticated(true);
     await _storage.setOnboardingSeen();

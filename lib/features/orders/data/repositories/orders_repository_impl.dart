@@ -462,7 +462,7 @@ Map<String, dynamic> _linePayload(CartLine line) {
     if (line.addons.isNotEmpty)
       'addons': line.addons
           .map(
-            (addon) => <String, dynamic>{
+            (MenuAddon addon) => <String, dynamic>{
               'addon_id': _asIntOrString(addon.id),
               'quantity': 1,
             },

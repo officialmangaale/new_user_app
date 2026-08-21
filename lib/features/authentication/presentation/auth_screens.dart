@@ -394,7 +394,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       final session = await ref
           .read(authRepositoryProvider)
           .verifyOtp(phone: widget.phone, otp: _code);
-      await ref.read(appControllerProvider.notifier).completeLogin(session);
+      await ref
+          .read(appControllerProvider.notifier)
+          .completeLogin(
+            authToken: session.authToken,
+            userId: session.user.userId,
+            name: session.user.name,
+            phone: session.user.phone,
+          );
       if (!mounted) return;
       // A returning customer should not be pushed back through onboarding.
       final destination = (!session.user.isNewUser && widget.returnTo == '/setup')

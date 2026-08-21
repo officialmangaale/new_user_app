@@ -46,7 +46,7 @@ sealed class Failure {
         statusCode: code,
       );
     }
-    if (code != null && code >= 400 && code < 500) {
+    if (code >= 400 && code < 500) {
       return ValidationFailure(
         exception.message,
         statusCode: code,
