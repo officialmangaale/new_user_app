@@ -4,9 +4,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/services/api_exception.dart';
 import '../../../core/widgets/app_ui.dart';
+import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../authentication/presentation/auth_screens.dart';
+import '../../notifications/providers/device_token_providers.dart';
+import '../../orders/providers/orders_providers.dart';
+import '../providers/engagement_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({this.embedded = false, super.key});
@@ -18,6 +23,19 @@ class ProfileScreen extends ConsumerWidget {
     final authenticated = ref.watch(
       appControllerProvider.select((state) => state.authenticated),
     );
+    // Wallet and referral figures are read from the same endpoints the wallet
+    // and referral screens use. Until they resolve the row simply shows no
+    // trailing value rather than a placeholder amount.
+    final walletLabel = authenticated
+        ? ref
+              .watch(walletProvider)
+              .whenOrNull(data: (w) => '₹${w.balance.round()}')
+        : null;
+    final referralLabel = authenticated
+        ? ref
+              .watch(referralSummaryProvider)
+              .whenOrNull(data: (r) => '₹${r.totalEarned} earned')
+        : null;
     final content = ListView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.screenPadding,
@@ -30,7 +48,9 @@ class ProfileScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         _ProfileHero(
           authenticated: authenticated,
+          profile: authenticated ? ref.watch(profileProvider).value : null,
           onSignIn: () => context.push('/login?returnTo=/home'),
+          onEdit: () => _editProfile(context, ref),
         ),
         const SizedBox(height: AppSpacing.md),
         if (authenticated) const _ProfileStats(),
@@ -44,10 +64,13 @@ class ProfileScreen extends ConsumerWidget {
               route: '/orders',
               protected: true,
             ),
+            // Was '/tracking/TQ240761' — a hardcoded order id that opened
+            // tracking for an order that does not exist. The orders screen is
+            // the only place a real, server-issued id can come from.
             _MenuEntry(
               Icons.delivery_dining_outlined,
               'Active Orders',
-              route: '/tracking/TQ240761',
+              route: '/orders',
               protected: true,
             ),
             _MenuEntry(
@@ -55,20 +78,14 @@ class ProfileScreen extends ConsumerWidget {
               'Wallet',
               route: '/wallet',
               protected: true,
-              trailing: '₹1,284',
+              trailing: walletLabel,
             ),
             _MenuEntry(
               Icons.redeem_outlined,
               'Referral and Earn',
               route: '/referral',
               protected: true,
-              trailing: '₹386 earned',
-            ),
-            _MenuEntry(
-              Icons.savings_outlined,
-              'Total Shared Savings',
-              route: '/info/Total Shared Savings',
-              trailing: '₹2,840',
+              trailing: referralLabel,
             ),
           ],
           authenticated: authenticated,
@@ -79,7 +96,8 @@ class ProfileScreen extends ConsumerWidget {
             _MenuEntry(
               Icons.location_on_outlined,
               'Saved Addresses',
-              route: '/info/Saved Addresses',
+              route: '/addresses',
+              protected: true,
             ),
             _MenuEntry(
               Icons.credit_card_outlined,
@@ -199,6 +217,10 @@ class ProfileScreen extends ConsumerWidget {
         if (authenticated)
           TextButton.icon(
             onPressed: () async {
+              // De-register before the token is cleared, otherwise the call
+              // goes out unauthenticated and this device keeps receiving the
+              // previous customer's order pushes.
+              await ref.read(deviceTokenRegistrarProvider).unregister();
               await ref.read(appControllerProvider.notifier).logout();
               if (context.mounted) context.go('/welcome');
             },
@@ -222,11 +244,108 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
+/// Edits the customer record through the existing `PATCH /customer-web/profile`.
+///
+/// Phone is the login identity and is not editable here — user-service issues
+/// it during OTP verification.
+Future<void> _editProfile(BuildContext context, WidgetRef ref) async {
+  final current = ref.read(profileProvider).value;
+  final name = TextEditingController(text: current?.name ?? '');
+  final email = TextEditingController(text: current?.email ?? '');
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Edit profile'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: name,
+            decoration: const InputDecoration(labelText: 'Name'),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: email,
+            decoration: const InputDecoration(labelText: 'Email'),
+            keyboardType: TextInputType.emailAddress,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (saved != true || !context.mounted) {
+    name.dispose();
+    email.dispose();
+    return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref
+        .read(accountRepositoryProvider)
+        .updateProfile(name: name.text.trim(), email: email.text.trim());
+    ref.invalidate(profileProvider);
+    messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
+  } on ApiException catch (error) {
+    messenger.showSnackBar(SnackBar(content: Text(error.message)));
+  } finally {
+    name.dispose();
+    email.dispose();
+  }
+}
+
 class _ProfileHero extends StatelessWidget {
-  const _ProfileHero({required this.authenticated, required this.onSignIn});
+  const _ProfileHero({
+    required this.authenticated,
+    required this.profile,
+    required this.onSignIn,
+    required this.onEdit,
+  });
 
   final bool authenticated;
+
+  /// Null while `/customer-web/profile` is still loading, or when signed out.
+  final CustomerProfile? profile;
   final VoidCallback onSignIn;
+  final VoidCallback onEdit;
+
+  /// Masks the middle of the number the way the account header should, without
+  /// inventing digits.
+  static String _maskPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 4) return phone;
+    return '+91 ••••• ${digits.substring(digits.length - 5)}';
+  }
+
+  String get _displayName {
+    if (!authenticated) return 'Welcome, guest';
+    final name = profile?.name.trim() ?? '';
+    return name.isEmpty ? 'Your account' : name;
+  }
+
+  String get _subtitle {
+    if (!authenticated) return 'Sign in to access orders and rewards';
+    final phone = profile?.phone.trim() ?? '';
+    if (phone.isNotEmpty) return _maskPhone(phone);
+    final email = profile?.email.trim() ?? '';
+    return email.isNotEmpty ? email : 'Loading your details…';
+  }
+
+  String get _initial {
+    if (!authenticated) return 'G';
+    final name = profile?.name.trim() ?? '';
+    return name.isEmpty ? '•' : name.substring(0, 1).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -242,7 +361,7 @@ class _ProfileHero extends StatelessWidget {
             radius: 36,
             backgroundColor: AppColors.light,
             child: Text(
-              authenticated ? 'A' : 'G',
+              _initial,
               style: const TextStyle(
                 fontSize: 27,
                 color: AppColors.dark,
@@ -256,16 +375,14 @@ class _ProfileHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  authenticated ? 'Aarav Mehta' : 'Welcome, guest',
+                  _displayName,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  authenticated
-                      ? '+91 ••••• 43210'
-                      : 'Sign in to access orders and rewards',
+                  _subtitle,
                   style: const TextStyle(
                     color: Color(0xFFBCECE5),
                     fontSize: 12,
@@ -274,7 +391,7 @@ class _ProfileHero extends StatelessWidget {
                 const SizedBox(height: 9),
                 if (authenticated)
                   InkWell(
-                    onTap: () {},
+                    onTap: onEdit,
                     child: const Text(
                       'Edit profile',
                       style: TextStyle(
@@ -307,26 +424,49 @@ class _ProfileHero extends StatelessWidget {
   }
 }
 
-class _ProfileStats extends StatelessWidget {
+/// Wallet and referral figures from `/customer-web/wallet` and
+/// `/customer-web/referrals`.
+///
+/// The third tile used to read "Points: 2,450"; no loyalty balance is exposed
+/// to the customer app, so it now shows the referral count the referrals
+/// endpoint does return rather than an invented number.
+class _ProfileStats extends ConsumerWidget {
   const _ProfileStats();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wallet = ref.watch(walletProvider);
+    final referral = ref.watch(referralSummaryProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
-          children: const [
+          children: [
             Expanded(
-              child: _Stat(label: 'Wallet', value: '₹1,284'),
+              child: _Stat(
+                label: 'Wallet',
+                value: wallet.whenOrNull(
+                  data: (data) => '₹${data.balance.round()}',
+                ),
+              ),
             ),
-            SizedBox(height: 38, child: VerticalDivider()),
+            const SizedBox(height: 38, child: VerticalDivider()),
             Expanded(
-              child: _Stat(label: 'Referral', value: '₹386'),
+              child: _Stat(
+                label: 'Referral',
+                value: referral.whenOrNull(
+                  data: (data) => '₹${data.totalEarned}',
+                ),
+              ),
             ),
-            SizedBox(height: 38, child: VerticalDivider()),
+            const SizedBox(height: 38, child: VerticalDivider()),
             Expanded(
-              child: _Stat(label: 'Points', value: '2,450'),
+              child: _Stat(
+                label: 'Referrals',
+                value: referral.whenOrNull(
+                  data: (data) => '${data.totalReferrals}',
+                ),
+              ),
             ),
           ],
         ),
@@ -339,14 +479,17 @@ class _Stat extends StatelessWidget {
   const _Stat({required this.label, required this.value});
 
   final String label;
-  final String value;
+
+  /// Null while the figure is still loading or unavailable — shown as a dash
+  /// rather than a stand-in amount.
+  final String? value;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Text(
-          value,
+          value ?? '—',
           style: const TextStyle(
             fontWeight: FontWeight.w900,
             color: AppColors.dark,

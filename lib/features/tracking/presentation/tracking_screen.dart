@@ -74,7 +74,24 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     _ => 0,
   };
 
+  /// Statuses after which nothing more will change, so polling should stop.
+  static const _terminalStatuses = {
+    'delivered',
+    'completed',
+    'done',
+    'cancelled',
+    'canceled',
+    'rejected',
+    'declined',
+  };
+
   void _syncStatus(String status) {
+    // A delivered or cancelled order will never change again; polling it every
+    // 15 s for as long as the screen is open is pure waste.
+    if (_terminalStatuses.contains(status.toLowerCase())) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
     final next = _indexForStatus(status);
     if (next == _statusIndex) return;
     // Defer: this runs during build, so state changes must wait a frame.

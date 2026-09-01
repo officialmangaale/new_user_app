@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../error/failures.dart';
 import '../services/api_exception.dart';
 import 'app_ui.dart';
 
+/// True when [error] represents "the request never reached the server".
+///
+/// Repositories normalize transport errors to [ApiException] and then convert
+/// them to a [NetworkFailure] at the domain boundary. Providers rethrow the
+/// [Failure], so checking only for [ApiException] would never match and the
+/// offline state would be unreachable — both are accepted here.
+bool isOfflineError(Object error) =>
+    error is NetworkFailure ||
+    (error is ApiException && error.isNetworkError);
+
 /// Renders an [AsyncValue] using the app's existing loading, error and empty
 /// widgets so every wired screen behaves the same way.
-///
-/// Network failures render [ErrorState] in its `offline` variant, which is why
-/// repositories normalize everything to [ApiException].
 class AsyncView<T> extends StatelessWidget {
   const AsyncView({
     required this.value,
@@ -32,7 +40,7 @@ class AsyncView<T> extends StatelessWidget {
     return value.when(
       loading: () => const LoadingSkeleton(),
       error: (error, _) => ErrorState(
-        offline: error is ApiException && error.isNetworkError,
+        offline: isOfflineError(error),
         onRetry: onRetry,
       ),
       data: (data) {

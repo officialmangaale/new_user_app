@@ -199,13 +199,13 @@ class PremiumCategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 76,
+      width: 78,
       child: Semantics(
         button: true,
         selected: selected,
         label: '$label category',
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(36),
           onTap: () {
             HapticFeedback.selectionClick();
             onTap?.call();
@@ -215,22 +215,28 @@ class PremiumCategoryTile extends StatelessWidget {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
-                width: 64,
-                height: 64,
+                width: 66,
+                height: 66,
                 decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.primaryLight
-                      : AppColors.primaryVeryLight,
-                  borderRadius: BorderRadius.circular(19),
+                  color: selected ? AppColors.primaryLight : AppColors.surface,
+                  shape: BoxShape.circle,
                   border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.border,
+                    color: selected ? AppColors.primary : Colors.white,
+                    width: selected ? 2 : 4,
                   ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: AppColors.shadow,
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: imageUrl.isEmpty
                     ? Icon(
                         categoryIcon(iconKey),
-                        size: 34,
+                        size: 30,
                         color: selected
                             ? AppColors.primaryDark
                             : AppColors.textPrimary,
@@ -247,7 +253,10 @@ class PremiumCategoryTile extends StatelessWidget {
                 maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: selected ? AppColors.primary : AppColors.textPrimary,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -258,6 +267,7 @@ class PremiumCategoryTile extends StatelessWidget {
 
   static IconData categoryIcon(String key) {
     return switch (key) {
+      'all' => Icons.grid_view_rounded,
       'rice' => Icons.rice_bowl_rounded,
       'pizza' => Icons.local_pizza_outlined,
       'burger' => Icons.lunch_dining_outlined,
@@ -274,6 +284,7 @@ class PremiumCategoryTile extends StatelessWidget {
       'personal' => Icons.spa_outlined,
       'frozen' => Icons.ac_unit_rounded,
       'baby' => Icons.child_care_outlined,
+      'grocery' => Icons.shopping_basket_outlined,
       _ => Icons.local_cafe_outlined,
     };
   }

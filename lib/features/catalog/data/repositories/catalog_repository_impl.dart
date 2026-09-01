@@ -51,13 +51,28 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         },
       );
       return HomeFeed(
-        restaurants: (restaurantRows.isNotEmpty
-                ? restaurantRows
-                : readList(data, 'recommended_restaurants'))
-            .map(_restaurant)
-            .toList(growable: false),
-        featuredItems: listFrom(trending, keys: const ['items'])
-            .map((json) => _catalogItem(json))
+        restaurants:
+            (restaurantRows.isNotEmpty
+                    ? restaurantRows
+                    : readList(data, 'recommended_restaurants'))
+                .map(_restaurant)
+                .toList(growable: false),
+        featuredItems: listFrom(
+          trending,
+          keys: const ['items'],
+        ).map((json) => _catalogItem(json)).toList(growable: false),
+        banners: readList(data, 'banners')
+            .map(
+              (json) => HomeBanner(
+                id: readString(json, const ['id']),
+                title: readString(json, const ['title']),
+                subtitle: readString(json, const ['subtitle']),
+                imageUrl: readString(json, const ['image_url', 'image']),
+                restaurantId: readString(json, const ['restaurant_id']),
+                ctaText: readString(json, const ['cta_text']),
+              ),
+            )
+            .where((banner) => banner.title.isNotEmpty)
             .toList(growable: false),
       );
     });
@@ -82,9 +97,10 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           'limit': limit,
         },
       );
-      return listFrom(raw, keys: const ['restaurants', 'items'])
-          .map(_restaurant)
-          .toList(growable: false);
+      return listFrom(
+        raw,
+        keys: const ['restaurants', 'items'],
+      ).map(_restaurant).toList(growable: false);
     });
   }
 
@@ -105,18 +121,43 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           'limit': limit,
         },
       );
-      return listFrom(raw, keys: const ['merchants', 'items', 'results'])
-          .map(_groceryMerchant)
-          .toList(growable: false);
+      return listFrom(
+        raw,
+        keys: const ['merchants', 'items', 'results'],
+      ).map(_groceryMerchant).toList(growable: false);
     });
   }
 
   @override
   Future<Result<Restaurant>> fetchRestaurantDetail(String restaurantId) {
     return _run(() async {
-      final data = await _getObject('/restaurants/public/$restaurantId');
-      return _restaurant(data);
+      // Both endpoints wrap the record under a `restaurant` key inside the
+      // envelope's `data`. Reading the envelope directly yields an empty
+      // record, which is why the header used to render blank.
+      //
+      // The consumer menu endpoint is preferred because its projection carries
+      // the fields this screen shows — rating, review_count, delivery_time and
+      // cuisine — none of which `/restaurants/public/:id` returns.
+      try {
+        final data = await _getObject('/api/restaurants/$restaurantId/menu');
+        final mapped = _restaurant(_unwrapRestaurant(data));
+        // Only accept it if it actually identified a restaurant; otherwise fall
+        // through rather than render a nameless header.
+        if (mapped.name.isNotEmpty || mapped.id.isNotEmpty) return mapped;
+      } on ApiException {
+        // fall through to the public record below
+      }
+      final fallback = await _getObject('/restaurants/public/$restaurantId');
+      return _restaurant(_unwrapRestaurant(fallback));
     });
+  }
+
+  /// Returns the `restaurant` object when the payload nests one, otherwise the
+  /// payload itself.
+  Map<String, dynamic> _unwrapRestaurant(Map<String, dynamic> data) {
+    final nested = data['restaurant'];
+    if (nested is Map) return Map<String, dynamic>.from(nested);
+    return data;
   }
 
   @override
@@ -132,7 +173,12 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         raw = await _get('/api/restaurants/$restaurantId/menu');
       }
 
-      final categories = listFrom(raw, keys: const ['categories']);
+      // `/menu/online` names the array `categories`; the consumer fallback
+      // `/api/restaurants/:id/menu` names it `menu_categories`.
+      final categories = listFrom(
+        raw,
+        keys: const ['categories', 'menu_categories'],
+      );
       if (categories.isNotEmpty) {
         return categories
             .map(
@@ -253,9 +299,10 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           'limit': limit,
         },
       );
-      return listFrom(raw, keys: const ['items', 'results'])
-          .map((json) => _catalogItem(json))
-          .toList(growable: false);
+      return listFrom(
+        raw,
+        keys: const ['items', 'results'],
+      ).map((json) => _catalogItem(json)).toList(growable: false);
     });
   }
 
@@ -293,9 +340,10 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         '/customer-web/search',
         query: <String, dynamic>{'q': query},
       );
-      return listFrom(raw, keys: const ['restaurants', 'items', 'results'])
-          .map(_restaurant)
-          .toList(growable: false);
+      return listFrom(
+        raw,
+        keys: const ['restaurants', 'items', 'results'],
+      ).map(_restaurant).toList(growable: false);
     });
   }
 
@@ -315,12 +363,14 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         },
       );
       return CatalogSearchResults(
-        items: readList(data, 'dishes')
-            .map((json) => _catalogItem(json))
-            .toList(growable: false),
-        restaurants: readList(data, 'restaurants')
-            .map(_restaurant)
-            .toList(growable: false),
+        items: readList(
+          data,
+          'dishes',
+        ).map((json) => _catalogItem(json)).toList(growable: false),
+        restaurants: readList(
+          data,
+          'restaurants',
+        ).map(_restaurant).toList(growable: false),
       );
     });
   }
@@ -399,10 +449,7 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
     String? storeId,
   }) {
     final price = readDouble(json, const ['price']).round();
-    final original = readDouble(json, const [
-      'original_price',
-      'mrp',
-    ]).round();
+    final original = readDouble(json, const ['original_price', 'mrp']).round();
     return CatalogItem(
       id: readString(json, const ['id', 'item_id', 'menu_item_id']),
       name: readString(json, const ['name', 'item_name']),
@@ -417,17 +464,22 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       storeId: storeId ?? readString(json, const ['restaurant_id', 'store_id']),
       categoryId: readString(json, const ['category_id']),
       isVeg: json['is_veg'] == true || json['is_vegetarian'] == true,
+      isAvailable: readBool(json, const [
+        'is_available',
+        'available',
+      ], orElse: true),
+      hasVariants: readBool(json, const ['has_variants']),
+      hasAddons: readBool(json, const ['has_addons']),
       variants: readList(json, 'variants')
           .map(
             (variant) => MenuVariant(
               id: readString(variant, const ['id', 'variant_id']),
               name: readString(variant, const ['name', 'variant_name']),
               price: readDouble(variant, const ['price']).round(),
-              isAvailable: readBool(
-                variant,
-                const ['is_available', 'available'],
-                orElse: true,
-              ),
+              isAvailable: readBool(variant, const [
+                'is_available',
+                'available',
+              ], orElse: true),
             ),
           )
           .where((variant) => variant.id.isNotEmpty)
@@ -438,11 +490,10 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
               id: readString(addon, const ['id', 'addon_id']),
               name: readString(addon, const ['name', 'addon_name']),
               price: readDouble(addon, const ['price']).round(),
-              isAvailable: readBool(
-                addon,
-                const ['is_available', 'available'],
-                orElse: true,
-              ),
+              isAvailable: readBool(addon, const [
+                'is_available',
+                'available',
+              ], orElse: true),
             ),
           )
           .where((addon) => addon.id.isNotEmpty)
@@ -464,8 +515,8 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       cuisine: description.isNotEmpty
           ? description
           : availableProducts > 0
-              ? '$availableProducts products available'
-              : 'Daily essentials',
+          ? '$availableProducts products available'
+          : 'Daily essentials',
       rating: readDouble(json, const ['rating', 'average_rating']),
       deliveryMinutes: _readGroceryDeliveryMinutes(json),
       distanceKm: distance,
@@ -473,26 +524,24 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         'delivery_fee',
         'delivery_charge',
       ]).round(),
-      discount: 0,
-      imageUrl: readString(json, const [
-        'banner_url',
-        'logo_url',
-        'image_url',
-      ]),
+      discount: readDouble(json, const [
+        'discount',
+        'discount_percent',
+        'offer_discount',
+      ]).round(),
+      imageUrl: readString(json, const ['banner_url', 'logo_url', 'image_url']),
     );
   }
 
-  CatalogItem _groceryProduct(
-    Map<String, dynamic> json, {
-    String? storeName,
-  }) {
+  CatalogItem _groceryProduct(Map<String, dynamic> json, {String? storeName}) {
     final price = readDouble(json, const ['selling_price', 'price']).round();
     final original = readDouble(json, const ['mrp', 'original_price']).round();
     return CatalogItem(
       id: readString(json, const ['grocery_product_id', 'product_id', 'id']),
       name: readString(json, const ['name', 'product_name']),
       subtitle: _groceryProductSubtitle(json),
-      store: storeName ??
+      store:
+          storeName ??
           readString(json, const ['merchant_name', 'store', 'store_name']),
       price: price,
       originalPrice: original > price ? original : price,
@@ -508,6 +557,11 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         'category_id',
       ]),
       isVeg: true,
+      isAvailable: readBool(json, const [
+        'is_available',
+        'in_stock',
+        'available',
+      ], orElse: true),
     );
   }
 }
@@ -551,8 +605,8 @@ int _readGroceryDeliveryMinutes(Map<String, dynamic> json) {
   if (explicit > 0) return explicit;
   final deliveryTime = readString(json, const ['delivery_time']);
   final match = RegExp(r'\d+').firstMatch(deliveryTime);
-  if (match != null) return int.tryParse(match.group(0) ?? '') ?? 30;
-  return 30;
+  if (match != null) return int.tryParse(match.group(0) ?? '') ?? 0;
+  return 0;
 }
 
 String _groceryProductSubtitle(Map<String, dynamic> json) {

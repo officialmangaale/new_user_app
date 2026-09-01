@@ -11,6 +11,7 @@ import '../../../core/widgets/premium_components.dart';
 import '../../../core/services/api_exception.dart';
 import '../../../shared/models/app_models.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../notifications/providers/device_token_providers.dart';
 import '../providers/auth_providers.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -29,6 +30,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     _navigationTimer = Timer(const Duration(milliseconds: 1300), () {
       if (!mounted) return;
       final authenticated = ref.read(appControllerProvider).authenticated;
+      // Refresh the stored push token on every restored session; FCM rotates
+      // tokens and the server would otherwise keep a stale one.
+      if (authenticated) {
+        unawaited(ref.read(deviceTokenRegistrarProvider).register());
+      }
       context.go(authenticated ? '/home' : '/welcome');
     });
   }
@@ -402,6 +408,8 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             name: session.user.name,
             phone: session.user.phone,
           );
+      // The push token can only be bound to a user id once a session exists.
+      unawaited(ref.read(deviceTokenRegistrarProvider).register());
       if (!mounted) return;
       // A returning customer should not be pushed back through onboarding.
       final destination = (!session.user.isNewUser && widget.returnTo == '/setup')

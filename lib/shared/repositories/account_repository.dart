@@ -137,6 +137,31 @@ class AccountRepository {
     await _send('PATCH', '/notifications/$id/read', null);
   }
 
+  /// POST /notifications/device-token
+  ///
+  /// Without this the FCM token never reaches the server, so no order-status
+  /// push can ever be addressed to this device. `platform` is required by the
+  /// handler.
+  Future<void> registerDeviceToken({
+    required String token,
+    required String platform,
+  }) async {
+    await _send('POST', '/notifications/device-token', <String, dynamic>{
+      'token': token,
+      'device_token': token,
+      'platform': platform,
+    });
+  }
+
+  /// DELETE /notifications/device-token — called on logout so a signed-out
+  /// device stops receiving another customer's order updates.
+  Future<void> removeDeviceToken(String token) async {
+    await _send('DELETE', '/notifications/device-token', <String, dynamic>{
+      'token': token,
+      'device_token': token,
+    });
+  }
+
   // ------------------------------------------------------------------
   // transport
   // ------------------------------------------------------------------

@@ -10,39 +10,67 @@ import '../../../shared/models/app_models.dart';
 import '../providers/orders_providers.dart';
 
 class OrdersScreen extends StatelessWidget {
-  const OrdersScreen({super.key});
+  const OrdersScreen({this.embedded = false, super.key});
+
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
+    const tabs = TabBar(
+      tabs: [
+        Tab(text: 'Active'),
+        Tab(text: 'Completed'),
+        Tab(text: 'Cancelled'),
+      ],
+    );
+    final body = TabBarView(
+      children: [
+        _OrdersList(status: OrderStatus.active, embedded: embedded),
+        _OrdersList(status: OrderStatus.completed, embedded: embedded),
+        _OrdersList(status: OrderStatus.cancelled, embedded: embedded),
+      ],
+    );
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('My orders'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Active'),
-              Tab(text: 'Completed'),
-              Tab(text: 'Cancelled'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _OrdersList(status: OrderStatus.active),
-            _OrdersList(status: OrderStatus.completed),
-            _OrdersList(status: OrderStatus.cancelled),
-          ],
-        ),
-      ),
+      child: embedded
+          ? SafeArea(
+              bottom: false,
+              child: ColoredBox(
+                color: AppColors.background,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.screenPadding,
+                        AppSpacing.md,
+                        AppSpacing.screenPadding,
+                        AppSpacing.sm,
+                      ),
+                      child: Text(
+                        'My orders',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                    tabs,
+                    Expanded(child: body),
+                  ],
+                ),
+              ),
+            )
+          : Scaffold(
+              appBar: AppBar(title: const Text('My orders'), bottom: tabs),
+              body: body,
+            ),
     );
   }
 }
 
 class _OrdersList extends ConsumerWidget {
-  const _OrdersList({required this.status});
+  const _OrdersList({required this.status, required this.embedded});
 
   final OrderStatus status;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,7 +97,12 @@ class _OrdersList extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(ordersProvider),
           child: ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              embedded ? AppSpacing.navigationClearance + 24 : AppSpacing.md,
+            ),
             itemCount: filtered.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) => _OrderCard(order: filtered[index]),

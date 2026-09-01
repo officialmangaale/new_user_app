@@ -55,7 +55,16 @@ class ApiException implements Exception {
     final data = response?.data;
     if (data is Map) {
       final map = Map<String, dynamic>.from(data);
-      final message = map['message'] ?? map['error'];
+      // Older handlers return `{ message }`; newer ones wrap the reason in
+      // `{ success: false, error: { code, message } }`. Reading only the top
+      // level turns every message from the latter into "Request failed with
+      // status 400".
+      final nestedError = map['error'];
+      final nested = nestedError is Map
+          ? Map<String, dynamic>.from(nestedError)
+          : const <String, dynamic>{};
+      final message =
+          map['message'] ?? nested['message'] ?? map['error'] ?? nested['code'];
       return ApiException(
         statusCode: status,
         message: message is String && message.trim().isNotEmpty
@@ -63,6 +72,8 @@ class ApiException implements Exception {
             : 'Request failed with status $status',
         errors: map['errors'] is Map
             ? Map<String, dynamic>.from(map['errors'] as Map)
+            : nested['details'] is Map
+            ? Map<String, dynamic>.from(nested['details'] as Map)
             : null,
       );
     }

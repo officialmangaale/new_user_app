@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
+import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/premium_components.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/widgets/delivery_cards.dart';
@@ -31,19 +32,30 @@ class _RestaurantDetailsScreenState
   Widget build(BuildContext context) {
     // Detail and menu are separate endpoints; the header renders as soon as the
     // restaurant resolves rather than waiting for the full menu.
-    final restaurant =
-        ref.watch(restaurantDetailProvider(widget.restaurantId)).value ??
-        const Restaurant(
-          id: '',
-          name: '',
-          cuisine: '',
-          rating: 0,
-          deliveryMinutes: 0,
-          distanceKm: 0,
-          deliveryFee: 0,
-          discount: 0,
-          imageUrl: '',
-        );
+    final detail = ref.watch(restaurantDetailProvider(widget.restaurantId));
+    final restaurant = detail.value;
+    // Without this the screen fell back to a blank Restaurant, so a failed or
+    // pending request rendered a nameless, imageless header instead of a
+    // spinner or a retry.
+    if (restaurant == null) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: AppIconAction(
+            icon: Icons.arrow_back_rounded,
+            tooltip: 'Back',
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: detail.hasError
+            ? ErrorState(
+                offline: isOfflineError(detail.error!),
+                onRetry: () => ref.invalidate(
+                  restaurantDetailProvider(widget.restaurantId),
+                ),
+              )
+            : const LoadingSkeleton(),
+      );
+    }
     final menuSections =
         ref.watch(restaurantMenuProvider(widget.restaurantId)).value ??
             const <MenuSection>[];

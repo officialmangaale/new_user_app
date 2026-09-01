@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/presentation/addresses_screen.dart';
 import '../../features/account/presentation/profile_screen.dart';
 import '../../features/account/presentation/wallet_referral_screens.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
@@ -113,6 +114,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const NotificationsScreen(),
       ),
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+      GoRoute(path: '/addresses', builder: (_, _) => const AddressesScreen()),
       GoRoute(
         path: '/info/:title',
         builder: (_, state) => InformationScreen(

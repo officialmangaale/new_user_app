@@ -54,13 +54,20 @@ class AppController extends Notifier<AppState> {
   /// by this change.
   Future<void> _hydrate() async {
     final token = await _authStorage.readToken();
-    final authenticated =
-        token != null || await _storage.isAuthenticated();
+    final authenticated = token != null || await _storage.isAuthenticated();
     state = state.copyWith(authenticated: authenticated, sessionLoaded: true);
   }
 
   void setMode(DeliveryMode mode) {
     state = state.copyWith(mode: mode, activeHomeTab: 1);
+  }
+
+  void toggleMode() {
+    setMode(
+      state.mode == DeliveryMode.food
+          ? DeliveryMode.grocery
+          : DeliveryMode.food,
+    );
   }
 
   void setHomeTab(int index) => state = state.copyWith(activeHomeTab: index);
@@ -86,9 +93,7 @@ class AppController extends Notifier<AppState> {
   Future<void> logout() async {
     await _authStorage.clear();
     await _storage.setAuthenticated(false);
-    state = state.copyWith(
-      authenticated: false,
-    );
+    state = state.copyWith(authenticated: false);
   }
 
   void handleSessionExpired() {
@@ -104,4 +109,3 @@ class AppController extends Notifier<AppState> {
 final appControllerProvider = NotifierProvider<AppController, AppState>(
   AppController.new,
 );
-

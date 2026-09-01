@@ -66,10 +66,16 @@ class AuthSession {
   final String authToken;
   final AuthUser user;
 
+  /// Accepts `authToken` or `token`, at either the envelope root or inside
+  /// `data`. The production web client reads all four positions
+  /// (`services/authApi.ts`); accepting only `data.authToken` fails the login
+  /// outright with "the server did not return a session token" whenever the
+  /// service answers in one of the other shapes.
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     final rawUser = json['user'];
+    final token = json['authToken'] ?? json['token'];
     return AuthSession(
-      authToken: (json['authToken'] as String?) ?? '',
+      authToken: token is String ? token : '',
       user: AuthUser.fromJson(
         rawUser is Map
             ? Map<String, dynamic>.from(rawUser)
@@ -112,7 +118,17 @@ class AuthRepository {
         verifyOtpPath,
         data: <String, dynamic>{'phone': phone, 'otp': otp},
       );
-      final session = AuthSession.fromJson(unwrapApiObject(response.data));
+      // Merge the envelope root under the unwrapped `data` so a token sent
+      // beside `data` rather than inside it is still found. `data` wins on
+      // conflict.
+      final raw = response.data;
+      final root = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
+      final session = AuthSession.fromJson(<String, dynamic>{
+        ...root,
+        ...unwrapApiObject(raw),
+      });
       if (session.authToken.isEmpty) {
         throw const ApiException(
           statusCode: 0,

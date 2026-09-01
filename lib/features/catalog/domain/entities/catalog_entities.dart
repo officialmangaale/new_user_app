@@ -75,6 +75,9 @@ class CatalogItem {
     this.sharedDiscount = 0,
     this.variants = const [],
     this.addons = const [],
+    this.isAvailable = true,
+    this.hasVariants = false,
+    this.hasAddons = false,
   });
 
   final String id;
@@ -96,7 +99,28 @@ class CatalogItem {
   /// Empty when the item takes no extras.
   final List<MenuAddon> addons;
 
-  bool get needsCustomisation => variants.isNotEmpty || addons.isNotEmpty;
+  /// False when the kitchen has switched the item off. Ordering must be
+  /// blocked rather than failing at checkout.
+  final bool isAvailable;
+
+  /// The backend's `has_variants` / `has_addons` flags.
+  ///
+  /// List endpoints are inconsistent about shipping the option arrays —
+  /// `/customer-web/search` never does, and some `/customer-web/categories/…`
+  /// rows omit them too — while still setting these flags. They are the
+  /// reliable signal that a choice is required; [variants] and [addons] are
+  /// only the payload when the endpoint happened to include it.
+  final bool hasVariants;
+  final bool hasAddons;
+
+  /// True when the customer must pick something before this can be ordered.
+  bool get needsCustomisation =>
+      variants.isNotEmpty || addons.isNotEmpty || hasVariants || hasAddons;
+
+  /// True when a choice is required but the options were not delivered with
+  /// this record, so the full item has to be fetched before adding to cart.
+  bool get needsOptionHydration =>
+      (hasVariants && variants.isEmpty) || (hasAddons && addons.isEmpty);
 
   int get discountPercent => originalPrice <= price
       ? 0
@@ -137,12 +161,42 @@ class HomeCategory {
   final int itemCount;
 }
 
+/// A merchandising banner from the `banners` array of `GET /api/home`.
+class HomeBanner {
+  const HomeBanner({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+    required this.restaurantId,
+    required this.ctaText,
+  });
+
+  final String id;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+
+  /// The restaurant the banner opens. Empty when the banner is informational.
+  final String restaurantId;
+  final String ctaText;
+}
+
 /// Payload of `GET /api/home`.
 class HomeFeed {
-  const HomeFeed({required this.restaurants, required this.featuredItems});
+  const HomeFeed({
+    required this.restaurants,
+    required this.featuredItems,
+    this.banners = const [],
+  });
 
   final List<Restaurant> restaurants;
   final List<CatalogItem> featuredItems;
+
+  /// Server-curated banners. Previously dropped on the floor, which left the
+  /// home carousel dependent on a `discount` field the discovery endpoints
+  /// never return.
+  final List<HomeBanner> banners;
 }
 
 /// Mixed global search payload from `/customer-web/search`.

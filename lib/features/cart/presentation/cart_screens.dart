@@ -318,10 +318,8 @@ class _AddressCard extends ConsumerWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => context.push(
-                    '/info/${Uri.encodeComponent('Saved Addresses')}',
-                  ),
-                  child: const Text('Change'),
+                  onPressed: () => context.push('/addresses'),
+                  child: Text(address == null ? 'Add' : 'Change'),
                 ),
               ],
             ),

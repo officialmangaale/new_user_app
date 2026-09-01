@@ -443,7 +443,12 @@ BillSummary _billSummaryFromJson(Map<String, dynamic> json) {
       'rounded_total_amount',
       'payable_amount',
     ]).round(),
-    valid: source['valid'] != false,
+    // `/customer-web/cart/validate` reports this as `is_valid`; reading only
+    // `valid` meant an invalid cart still came back marked valid.
+    valid: readBool(source, const [
+      'is_valid',
+      'valid',
+    ], orElse: true),
     message: readString(source, const ['message']),
   );
 }

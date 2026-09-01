@@ -8,17 +8,29 @@ import '../../core/widgets/app_ui.dart';
 import '../models/app_models.dart';
 
 class RestaurantCard extends StatelessWidget {
-  const RestaurantCard({required this.restaurant, this.onTap, super.key});
+  const RestaurantCard({
+    required this.restaurant,
+    this.onTap,
+    this.width = 275,
+    this.compact = false,
+    super.key,
+  });
 
   final Restaurant restaurant;
   final VoidCallback? onTap;
+  final double width;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 275,
+      width: width,
       child: Card(
         clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(compact ? 15 : 18),
+          side: const BorderSide(color: AppColors.border),
+        ),
         child: InkWell(
           onTap: onTap,
           child: Column(
@@ -28,70 +40,132 @@ class RestaurantCard extends StatelessWidget {
                 children: [
                   AppNetworkImage(
                     url: restaurant.imageUrl,
-                    width: 275,
-                    height: 140,
+                    width: width,
+                    height: compact ? 116 : 140,
                   ),
                   if (restaurant.discount > 0)
                     Positioned(
-                      left: 10,
-                      top: 10,
+                      left: compact ? 7 : 10,
+                      top: compact ? 7 : 10,
                       child: AppPill(
                         label: '${restaurant.discount}% OFF',
-                        background: AppColors.dark,
+                        background: AppColors.primary,
                         foreground: Colors.white,
                       ),
                     ),
-                  if (restaurant.foodShare)
-                    const Positioned(
-                      right: 10,
-                      top: 10,
-                      child: AppPill(
+                  if (restaurant.foodShare && restaurant.discount <= 0)
+                    Positioned(
+                      left: compact ? 7 : 10,
+                      top: compact ? 7 : 10,
+                      child: const AppPill(
                         label: 'FoodShare',
                         icon: Icons.people_alt_rounded,
+                        background: AppColors.primary,
+                        foreground: Colors.white,
+                      ),
+                    ),
+                  if (restaurant.deliveryMinutes > 0)
+                    Positioned(
+                      right: compact ? 7 : 10,
+                      bottom: compact ? 7 : 10,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: compact ? 7 : 9,
+                          vertical: compact ? 5 : 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.96),
+                          borderRadius: BorderRadius.circular(99),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x1A172022),
+                              blurRadius: 7,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: compact ? 13 : 15,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${restaurant.deliveryMinutes} min',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: compact ? 9.5 : 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
               ),
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.sm),
+                padding: EdgeInsets.all(compact ? 9 : AppSpacing.sm),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            restaurant.name,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        if (restaurant.rating > 0) ...[
-                          const Icon(
-                            Icons.star_rounded,
-                            color: AppColors.success,
-                            size: 18,
-                          ),
-                          Text(
-                            '${restaurant.rating}',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      restaurant.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontSize: compact ? 14 : null,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       restaurant.cuisine,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: compact ? 10.5 : null,
+                      ),
                     ),
-                    if (_restaurantMeta(restaurant).isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _restaurantMeta(restaurant),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
+                    if (_restaurantFooterMeta(restaurant).isNotEmpty ||
+                        restaurant.rating > 0) ...[
+                      SizedBox(height: compact ? 7 : 8),
+                      Row(
+                        children: [
+                          if (restaurant.rating > 0) ...[
+                            const Icon(
+                              Icons.star_rounded,
+                              color: AppColors.primary,
+                              size: 15,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${restaurant.rating}',
+                              style: TextStyle(
+                                fontSize: compact ? 10 : 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (_restaurantFooterMeta(restaurant).isNotEmpty)
+                              const _MetaDot(),
+                          ],
+                          if (_restaurantFooterMeta(restaurant).isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                _restaurantFooterMeta(restaurant),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      fontSize: compact ? 9.5 : null,
+                                      color: AppColors.textSecondary,
+                                    ),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ],
@@ -105,10 +179,23 @@ class RestaurantCard extends StatelessWidget {
   }
 }
 
-String _restaurantMeta(Restaurant restaurant) {
+class _MetaDot extends StatelessWidget {
+  const _MetaDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        '•',
+        style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+      ),
+    );
+  }
+}
+
+String _restaurantFooterMeta(Restaurant restaurant) {
   final parts = <String>[
-    if (restaurant.deliveryMinutes > 0)
-      '${restaurant.deliveryMinutes} min',
     if (restaurant.distanceKm > 0) '${restaurant.distanceKm} km',
     if (restaurant.deliveryFee > 0) '₹${restaurant.deliveryFee} delivery',
   ];
@@ -661,6 +748,7 @@ class FloatingHomeNavigation extends StatelessWidget {
     required this.mode,
     required this.index,
     required this.onChanged,
+    required this.onModeToggle,
     required this.hasActiveGroup,
     super.key,
   });
@@ -668,98 +756,89 @@ class FloatingHomeNavigation extends StatelessWidget {
   final DeliveryMode mode;
   final int index;
   final ValueChanged<int> onChanged;
+  final VoidCallback onModeToggle;
   final bool hasActiveGroup;
 
   @override
   Widget build(BuildContext context) {
-    final groupLabel = mode == DeliveryMode.food ? 'FoodShare' : 'Share Basket';
-    return Container(
-      height: AppSpacing.navigationHeight,
-      margin: const EdgeInsets.fromLTRB(
-        AppSpacing.screenPadding,
-        0,
-        AppSpacing.screenPadding,
-        AppSpacing.navigationMargin,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(27),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 18,
-            offset: Offset(0, 6),
+    final groupLabel = mode == DeliveryMode.food ? 'FoodShare' : 'ShareBasket';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final modeWidth = constraints.maxWidth < 355 ? 112.0 : 130.0;
+        return Container(
+          height: AppSpacing.navigationHeight,
+          margin: const EdgeInsets.fromLTRB(
+            12,
+            0,
+            12,
+            AppSpacing.navigationMargin,
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _NavigationItem(
-              icon: mode == DeliveryMode.food
-                  ? Icons.people_alt_outlined
-                  : Icons.shopping_basket_outlined,
-              label: groupLabel,
-              selected: index == 0,
-              badge: hasActiveGroup,
-              onTap: () => onChanged(0),
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(27),
+            border: Border.all(color: AppColors.border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1A075E54),
+                blurRadius: 22,
+                offset: Offset(0, 7),
+              ),
+            ],
           ),
-          Expanded(
-            child: Transform.translate(
-              offset: const Offset(0, -9),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(40),
-                onTap: () => onChanged(1),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
                   children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: AppColors.shadow,
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.home_rounded,
-                        color: Colors.white,
-                        size: 26,
+                    Expanded(
+                      child: _NavigationItem(
+                        icon: mode == DeliveryMode.food
+                            ? Icons.people_alt_outlined
+                            : Icons.shopping_basket_outlined,
+                        label: groupLabel,
+                        selected: index == 0,
+                        badge: hasActiveGroup,
+                        onTap: () => onChanged(0),
                       ),
                     ),
-                    const SizedBox(height: 1),
-                    Text(
-                      'Home',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.dark,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: _NavigationItem(
+                        icon: Icons.home_rounded,
+                        label: 'Home',
+                        selected: index == 1,
+                        onTap: () => onChanged(1),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavigationItem(
+                        icon: Icons.receipt_long_outlined,
+                        label: 'Orders',
+                        selected: index == 2,
+                        onTap: () => onChanged(2),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+              Container(
+                width: 1,
+                height: 38,
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                color: AppColors.border,
+              ),
+              SizedBox(
+                width: modeWidth,
+                child: _ModeAction(
+                  mode: mode,
+                  onTap: onModeToggle,
+                  compact: modeWidth < 120,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _NavigationItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Profile',
-              selected: index == 2,
-              onTap: () => onChanged(2),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -782,7 +861,7 @@ class _NavigationItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -795,6 +874,7 @@ class _NavigationItem extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 child: Icon(
                   icon,
+                  size: 23,
                   color: selected ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
@@ -809,17 +889,121 @@ class _NavigationItem extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             label,
             maxLines: 1,
+            overflow: TextOverflow.fade,
+            softWrap: false,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
+              fontSize: 9.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
               color: selected ? AppColors.primary : AppColors.textSecondary,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ModeAction extends StatefulWidget {
+  const _ModeAction({
+    required this.mode,
+    required this.onTap,
+    required this.compact,
+  });
+
+  final DeliveryMode mode;
+  final VoidCallback onTap;
+  final bool compact;
+
+  @override
+  State<_ModeAction> createState() => _ModeActionState();
+}
+
+class _ModeActionState extends State<_ModeAction> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final food = widget.mode == DeliveryMode.food;
+    return Semantics(
+      button: true,
+      label: 'Switch from ${food ? 'Food' : 'Grocery'} mode',
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1,
+        duration: const Duration(milliseconds: 120),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTap: widget.onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.secondary, AppColors.primary],
+              ),
+              borderRadius: BorderRadius.circular(99),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x260F8B7E),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
+              child: Row(
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Icon(
+                      food
+                          ? Icons.restaurant_rounded
+                          : Icons.shopping_cart_outlined,
+                      key: ValueKey(widget.mode),
+                      size: widget.compact ? 17 : 19,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(width: widget.compact ? 4 : 6),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: Text(
+                        food ? 'Food' : 'Grocery',
+                        key: ValueKey(widget.mode),
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: widget.compact ? 10.5 : 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: widget.compact ? 34 : 38,
+                    height: widget.compact ? 34 : 38,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

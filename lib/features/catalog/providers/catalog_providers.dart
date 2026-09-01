@@ -28,11 +28,15 @@ final fetchRestaurantDetailUseCaseProvider = Provider((ref) => FetchRestaurantDe
 final fetchRestaurantMenuUseCaseProvider = Provider((ref) => FetchRestaurantMenuUseCase(ref.watch(catalogRepositoryProvider)));
 final fetchItemDetailUseCaseProvider = Provider((ref) => FetchItemDetailUseCase(ref.watch(catalogRepositoryProvider)));
 
-/// Helper to unwrap Results for UI providers
+/// Helper to unwrap Results for UI providers.
+///
+/// The [Failure] is rethrown as-is rather than flattened into a generic
+/// `Exception`: `AsyncView` inspects the type to decide between the offline
+/// and the generic error state, and a wrapped message loses that.
 T _unwrap<T>(Result<T> result) {
   return result.when(
     success: (data) => data,
-    failure: (failure) => throw Exception(failure.message),
+    failure: (failure) => throw failure,
   );
 }
 
