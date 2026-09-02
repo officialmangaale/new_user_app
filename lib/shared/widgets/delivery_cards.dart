@@ -202,7 +202,15 @@ String _restaurantFooterMeta(Restaurant restaurant) {
   return parts.join('  •  ');
 }
 
-class ProductCard extends StatelessWidget {
+/// Signature for [ProductCard.onAdd].
+///
+/// The card hands back a key pointing at its own product image so the caller
+/// can pass it to `addItemToCart` as the origin of the water-drop flight. The
+/// key is optional to use — a caller that ignores it still adds to the cart
+/// exactly as before, and simply gets no flight.
+typedef ProductAddCallback = void Function(GlobalKey imageKey);
+
+class ProductCard extends StatefulWidget {
   const ProductCard({
     required this.item,
     required this.quantity,
@@ -215,13 +223,29 @@ class ProductCard extends StatelessWidget {
 
   final CatalogItem item;
   final int quantity;
-  final VoidCallback onAdd;
+  final ProductAddCallback onAdd;
   final VoidCallback onRemove;
   final VoidCallback? onTap;
   final double width;
 
   @override
+  State<ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<ProductCard> {
+  /// Held in state so it is stable across rebuilds. A `GlobalKey` recreated on
+  /// every build would detach and reattach the image element each frame, and
+  /// this card rebuilds often — it watches the cart quantity.
+  final GlobalKey _imageKey = GlobalKey();
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final quantity = widget.quantity;
+    final onRemove = widget.onRemove;
+    final onTap = widget.onTap;
+    final width = widget.width;
+
     return SizedBox(
       width: width,
       child: Card(
@@ -237,6 +261,7 @@ class ProductCard extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     AppNetworkImage(
+                      key: _imageKey,
                       url: item.imageUrl,
                       width: double.infinity,
                       height: 112,
@@ -305,7 +330,7 @@ class ProductCard extends StatelessWidget {
                     ),
                     QuantityControl(
                       quantity: quantity,
-                      onAdd: onAdd,
+                      onAdd: () => widget.onAdd(_imageKey),
                       onRemove: onRemove,
                       compact: true,
                     ),

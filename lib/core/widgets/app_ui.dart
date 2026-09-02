@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../shared/models/app_models.dart';
+import '../nature/widgets/nature_button.dart';
 
 class AppNetworkImage extends StatelessWidget {
   const AppNetworkImage({
@@ -410,16 +411,27 @@ class QuantityControl extends StatelessWidget {
         ? SizedBox(
             key: const ValueKey('add'),
             height: compact ? 38 : 44,
-            child: OutlinedButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onAdd();
-              },
-              style: OutlinedButton.styleFrom(
-                minimumSize: Size(compact ? 72 : 88, compact ? 38 : 44),
-                padding: const EdgeInsets.symmetric(horizontal: 13),
+            // The ADD button is the app's signature interaction, so it gets the
+            // water treatment: a ripple from the touch point and a small
+            // compression.
+            //
+            // The haptic is deliberately NOT fired here. For this button it
+            // belongs to the moment the cart actually changes, which only
+            // `addItemToCart` knows about — firing on tap would buzz for adds
+            // that are refused. The previous `HapticFeedback.selectionClick()`
+            // on this branch has moved there rather than being duplicated.
+            child: NatureButton(
+              onTap: onAdd,
+              haptic: NatureHaptic.none,
+              borderRadius: 16,
+              builder: (context, handleTap) => OutlinedButton(
+                onPressed: handleTap,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: Size(compact ? 72 : 88, compact ? 38 : 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                ),
+                child: const Text('ADD'),
               ),
-              child: const Text('ADD'),
             ),
           )
         : Container(

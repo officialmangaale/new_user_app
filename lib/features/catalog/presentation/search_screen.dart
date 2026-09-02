@@ -134,7 +134,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                   ),
                                 ),
                               ),
-                              onAdd: () => _addSearchItem(context, ref, item),
+                              onAdd: (imageKey) =>
+                                  _addSearchItem(context, ref, item, imageKey),
                               onRemove: () => ref
                                   .read(cartControllerProvider.notifier)
                                   .removeItemById(item.id),
@@ -170,12 +171,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 Future<void> _addSearchItem(
   BuildContext context,
   WidgetRef ref,
-  CatalogItem item,
-) async {
+  CatalogItem item, [
+  GlobalKey? sourceKey,
+]) async {
   try {
     final detailed = await ref.read(itemDetailProvider(item.id).future);
     if (!context.mounted) return;
-    await addItemToCart(context, ref, detailed);
+    await addItemToCart(context, ref, detailed, sourceKey: sourceKey);
   } catch (_) {
     if (context.mounted) context.push('/food-item/${item.id}');
   }
@@ -229,7 +231,8 @@ class _GrocerySearchResults extends ConsumerWidget {
                 ),
               ),
             ),
-            onAdd: () => addItemToCart(context, ref, item),
+            onAdd: (imageKey) =>
+                addItemToCart(context, ref, item, sourceKey: imageKey),
             onRemove: () => ref
                 .read(cartControllerProvider.notifier)
                 .removeItemById(item.id),

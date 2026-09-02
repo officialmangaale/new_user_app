@@ -72,7 +72,8 @@ class CategoryItemsScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              onAdd: () => addItemToCart(context, ref, item),
+              onAdd: (imageKey) =>
+                  addItemToCart(context, ref, item, sourceKey: imageKey),
               onRemove: () =>
                   ref.read(cartControllerProvider.notifier).removeItemById(item.id),
               onTap: () => context.push(

@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/cart_drop/cart_beacon.dart';
+import '../../../core/nature/widgets/leaf_accent.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/premium_components.dart';
@@ -127,94 +129,110 @@ class DeliveryHomeFeed extends ConsumerWidget {
       );
     }
 
-    return SafeArea(
-      bottom: false,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.025, 0),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
+    return ColoredBox(
+      // Home's own ground, applied here rather than to the global theme so the
+      // pilot is contained: every other screen keeps AppColors.background until
+      // this treatment is reviewed.
+      color: NatureColors.offWhite,
+      child: SafeArea(
+        bottom: false,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.025, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
           ),
-        ),
-        child: CustomScrollView(
-          key: ValueKey(state.mode),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _HomeHero(
-                mode: state.mode,
-                locationLabel: _deliveryLocationLabel(selectedAddress),
-                cartCount: ref.watch(cartCountProvider),
-                onLocationTap: () => _showLocationSheet(context, ref),
-                onCartTap: () => context.push('/cart'),
-                onProfileTap: () => context.push('/profile'),
-                onSearchTap: () => context.push('/search'),
-              ),
-            ),
-            SliverToBoxAdapter(child: _CategoryStrip(grocery: grocery)),
-            if (banners.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _OfferCarousel(banners: banners),
-                ),
-              ),
-            ],
-            if (merchants.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _HomeSectionHeader(
-                    title: grocery ? 'Stores near you' : 'Popular near you',
-                    onViewAll: () => context.push('/search'),
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
+          child: CustomScrollView(
+            key: ValueKey(state.mode),
+            slivers: [
               SliverToBoxAdapter(
-                child: _RestaurantStrip(
-                  restaurants: merchants,
-                  grocery: grocery,
+                child: _HomeHero(
+                  mode: state.mode,
+                  locationLabel: _deliveryLocationLabel(selectedAddress),
+                  cartCount: ref.watch(cartCountProvider),
+                  onLocationTap: () => _showLocationSheet(context, ref),
+                  onCartTap: () => context.push('/cart'),
+                  onProfileTap: () => context.push('/profile'),
+                  onSearchTap: () => context.push('/search'),
                 ),
               ),
-            ],
-            if (items.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
+              SliverToBoxAdapter(child: _CategoryStrip(grocery: grocery)),
+              if (banners.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.md),
                 ),
-                sliver: SliverToBoxAdapter(
-                  child: _HomeSectionHeader(
-                    title: grocery ? 'Popular groceries' : 'Popular dishes',
-                    onViewAll: () => context.push('/search'),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _OfferCarousel(banners: banners),
                   ),
                 ),
+              ],
+              if (merchants.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.lg),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _HomeSectionHeader(
+                      title: grocery ? 'Stores near you' : 'Popular near you',
+                      onViewAll: () => context.push('/search'),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.sm),
+                ),
+                SliverToBoxAdapter(
+                  child: _RestaurantStrip(
+                    restaurants: merchants,
+                    grocery: grocery,
+                  ),
+                ),
+              ],
+              if (items.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.lg),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _HomeSectionHeader(
+                      title: grocery ? 'Popular groceries' : 'Popular dishes',
+                      onViewAll: () => context.push('/search'),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.sm),
+                ),
+                _productStrip(ref, items, grocery),
+              ],
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height:
+                      AppSpacing.navigationClearance +
+                      (cartVisible ? 72 : 0) +
+                      AppSpacing.md,
+                ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
-              _productStrip(ref, items, grocery),
             ],
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height:
-                    AppSpacing.navigationClearance +
-                    (cartVisible ? 72 : 0) +
-                    AppSpacing.md,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -254,7 +272,8 @@ class DeliveryHomeFeed extends ConsumerWidget {
                   ),
                 ),
               ),
-              onAdd: () => addItemToCart(context, ref, item),
+              onAdd: (imageKey) =>
+                  addItemToCart(context, ref, item, sourceKey: imageKey),
               onRemove: () => ref
                   .read(cartControllerProvider.notifier)
                   .removeItemById(item.id),
@@ -540,11 +559,19 @@ class _HeroHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        _HeaderCircleAction(
-          tooltip: 'Cart',
-          icon: Icons.shopping_cart_outlined,
-          badgeCount: cartCount,
-          onPressed: onCartTap,
+        // The cart is the collection point every water drop flows toward, so
+        // it registers itself as the flight target and owns the arrival
+        // ripple. The disc is a shade wider than the button, reading as a calm
+        // turquoise halo rather than recolouring the control itself.
+        CartBeacon(
+          discSize: 54,
+          builder: (context, badgeScale) => _HeaderCircleAction(
+            tooltip: 'Cart',
+            icon: Icons.shopping_cart_outlined,
+            badgeCount: cartCount,
+            badgeScale: badgeScale,
+            onPressed: onCartTap,
+          ),
         ),
         const SizedBox(width: 8),
         _HeaderCircleAction(
@@ -563,12 +590,26 @@ class _HeaderCircleAction extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.badgeCount = 0,
+    this.badgeScale,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
   final int badgeCount;
+
+  /// Supplied by [CartBeacon] so the count badge can acknowledge an arriving
+  /// item. Null everywhere else, which leaves the badge completely static.
+  final Animation<double>? badgeScale;
+
+  /// Wraps the badge in a scale transition only when a beacon supplied one, so
+  /// the profile button and any other user of this widget rebuilds exactly as
+  /// often as it did before.
+  Widget _maybeBounce(Widget badge) {
+    final scale = badgeScale;
+    if (scale == null) return badge;
+    return ScaleTransition(scale: scale, child: badge);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -592,21 +633,23 @@ class _HeaderCircleAction extends StatelessWidget {
           Positioned(
             right: -3,
             top: -4,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                badgeCount > 99 ? '99+' : '$badgeCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  height: 1,
-                  fontWeight: FontWeight.w700,
+            child: _maybeBounce(
+              Container(
+                constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -963,6 +1006,13 @@ class _HomeSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // A small leaf beside the heading. Decoration only: it sits before the
+        // text rather than over it, is excluded from semantics, and ignores
+        // pointers, so the heading reads and behaves exactly as it did.
+        const Padding(
+          padding: EdgeInsets.only(right: 7, bottom: 2),
+          child: LeafAccent(size: 15),
+        ),
         Expanded(
           child: Text(
             title,

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/widgets/order_success_ripple.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
@@ -189,7 +190,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       ),
     );
   }
-
 }
 
 String _checkoutRoute(String instructions) {
@@ -250,9 +250,8 @@ class _CartLineTile extends ConsumerWidget {
             QuantityControl(
               quantity: line.quantity,
               compact: true,
-              onAdd: () => ref
-                  .read(cartControllerProvider.notifier)
-                  .addItem(line.item),
+              onAdd: () =>
+                  ref.read(cartControllerProvider.notifier).addItem(line.item),
               onRemove: () => ref
                   .read(cartControllerProvider.notifier)
                   .removeItem(line.lineId),
@@ -465,7 +464,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Future<void> _placeOrder() async {
     setState(() => _paying = true);
     try {
-      final grocery = ref.read(cartLinesProvider).first.item.type ==
+      final grocery =
+          ref.read(cartLinesProvider).first.item.type ==
           CatalogItemType.grocery;
       final result = await ref
           .read(checkoutViewModelProvider.notifier)
@@ -474,15 +474,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             paymentMethod: grocery ? 'cod' : 'cash',
             instructions: widget.instructions,
           );
-      
+
       if (!mounted) return;
-      
+
       result.when(
-        success: (placed) => context.go(
-          grocery
-              ? '/tracking/${placed.orderId}?mode=grocery'
-              : '/tracking/${placed.orderId}',
-        ),
+        success: (placed) {
+          // Arms the celebration for the screen we are about to open. This is
+          // a flag, not a delay: navigation happens on the very next line, and
+          // the tracking screen paints the order before anything is layered
+          // over it. A failure never reaches here, so a failed order can never
+          // celebrate.
+          ref.read(orderCelebrationProvider.notifier).arm(placed.orderId);
+          context.go(
+            grocery
+                ? '/tracking/${placed.orderId}?mode=grocery'
+                : '/tracking/${placed.orderId}',
+          );
+        },
         failure: (failure) => _showError(failure.message),
       );
     } finally {

@@ -43,6 +43,7 @@ dependencies:
   firebase_core: ^2.24.2
   firebase_messaging: ^14.7.9
   flutter_local_notifications: ^17.1.2
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,9 @@ flutter:
   assets:
     - assets/images/home-hero-food.png
     - assets/images/home-hero-grocery.png
+    # Nature layer. Regenerate with:
+    #   dart run tool/generate_nature_audio.dart
+    - assets/audio/water_drop.wav
 
   # To add assets to your application, add an assets section, like this:
   # assets:
