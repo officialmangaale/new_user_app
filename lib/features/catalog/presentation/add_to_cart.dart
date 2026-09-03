@@ -56,36 +56,44 @@ enum AddToCartOutcome {
 /// The cart mutation happens first and is never awaited on the animation — the
 /// celebration is triggered after the state change, and returns immediately.
 ///
-/// [sourceKey] is optional. When supplied it should be the product image
-/// already on screen, which the drop then flies from. Callers that omit it
-/// still get the cart ripple and badge bounce.
+/// [origin] is optional. It carries the product image the drop is made from and
+/// the leaf button it lands on. Callers that omit it still mutate the cart
+/// identically and simply get the pot's reaction without the journey.
 Future<AddToCartOutcome> addItemToCart(
   BuildContext context,
   WidgetRef ref,
   CatalogItem item, {
   String? restaurantId,
   bool forceCustomise = false,
-  GlobalKey? sourceKey,
+  ProductAddOrigin? origin,
 }) async {
   final controller = ref.read(cartControllerProvider.notifier);
   final storeId = restaurantId ?? item.storeId;
 
-  // Read before any mutation. A quantity of zero means this tap came from the
-  // ADD button rather than the "+" stepper, which is what separates the full
-  // splash from a plain haptic.
-  final quantityBefore = ref.read(cartControllerProvider).quantityForItem(
-        item.id,
-        type: item.type,
-        storeId: storeId,
-      );
+  int currentQuantity() => ref
+      .read(cartControllerProvider)
+      .quantityForItem(item.id, type: item.type, storeId: storeId);
 
+  // Read before any mutation. Two things come out of it: whether this tap was
+  // the ADD button (quantity was zero) or the "+" stepper, and — by reading
+  // again afterwards — how many units actually landed in the cart.
+  final quantityBefore = currentQuantity();
+
+  /// Runs the water journey. Called only on paths that genuinely mutated the
+  /// cart, and only ever after the mutation, so the number of drops is measured
+  /// rather than assumed.
   void celebrate() {
     if (!context.mounted) return;
-    ref.read(cartDropControllerProvider).celebrateAdd(
+    final unitsAdded = currentQuantity() - quantityBefore;
+    if (unitsAdded <= 0) return;
+    ref
+        .read(cartDropControllerProvider)
+        .celebrateAdd(
           context: context,
           item: item,
-          isFirstAdd: quantityBefore == 0,
-          sourceKey: sourceKey,
+          unitsAdded: unitsAdded,
+          isIncrement: quantityBefore > 0,
+          origin: origin,
         );
   }
 

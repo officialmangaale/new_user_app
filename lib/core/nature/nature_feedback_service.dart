@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -33,6 +34,21 @@ class NatureFeedbackService {
   AudioPlayer? _splashPlayer;
   Future<void>? _splashLoading;
   DateTime? _lastSplashAt;
+
+  /// A small pool for the tip.
+  ///
+  /// Unlike the splash, several tips can legitimately sound in quick succession
+  /// — one per drop entering the pot. A single player would cut each one off as
+  /// the next began, so the pool round-robins and each drop gets to ring out.
+  final List<AudioPlayer> _tipPool = <AudioPlayer>[];
+  Future<void>? _tipLoading;
+  int _tipCursor = 0;
+  DateTime? _lastTipAt;
+
+  /// Enough for the maximum number of rendered drops in one sequence, so a run
+  /// of five never steals a player from itself.
+  static const int _tipPoolSize = 3;
+
   bool _disposed = false;
 
   /// True once the splash asset has been loaded into a player.
@@ -52,15 +68,15 @@ class NatureFeedbackService {
   /// Android exposes no per-app equivalent of the iOS silent switch; see the
   /// note on [silentModeSupport].
   static AudioContext _audioContext() => AudioContext(
-        iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
-        android: const AudioContextAndroid(
-          isSpeakerphoneOn: false,
-          stayAwake: false,
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.assistanceSonification,
-          audioFocus: AndroidAudioFocus.none,
-        ),
-      );
+    iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+    android: const AudioContextAndroid(
+      isSpeakerphoneOn: false,
+      stayAwake: false,
+      contentType: AndroidContentType.sonification,
+      usageType: AndroidUsageType.assistanceSonification,
+      audioFocus: AndroidAudioFocus.none,
+    ),
+  );
 
   /// Honest statement of what silent mode does per platform, surfaced so the
   /// limitation can be reported rather than assumed away.
@@ -125,6 +141,83 @@ class NatureFeedbackService {
     unawaited(_playSplash());
   }
 
+  /// One water drop meeting the water inside the clay pot.
+  ///
+  /// Called at the instant of *visual contact*, not when the button was
+  /// pressed — a sound that arrives before the drop lands reads as a UI beep
+  /// rather than as water.
+  ///
+  /// [sequenceIndex] is the drop's position in a run. Each successive tip plays
+  /// a little quieter so four drops recede rather than hammer, with [isLast]
+  /// allowed back up slightly so the run has a clear end.
+  ///
+  /// Returns immediately, and never throws.
+  void potTip({int sequenceIndex = 0, bool isLast = true}) {
+    unawaited(_playTip(sequenceIndex: sequenceIndex, isLast: isLast));
+  }
+
+  Future<void> _playTip({
+    required int sequenceIndex,
+    required bool isLast,
+  }) async {
+    if (_disposed || !isSoundEnabled()) return;
+
+    // Guards only against two drops landing in the same frame. Deliberately
+    // short: sequential tips are meant to be heard individually.
+    final now = DateTime.now();
+    final last = _lastTipAt;
+    if (last != null && now.difference(last) < NatureAudio.tipCooldown) {
+      return;
+    }
+    _lastTipAt = now;
+
+    try {
+      await _loadTipPool();
+      if (_disposed || _tipPool.isEmpty) return;
+
+      var volume =
+          NatureAudio.tipVolume *
+          math.pow(NatureAudio.tipFalloff, sequenceIndex).toDouble();
+      if (isLast) volume *= 1.18;
+      volume = volume.clamp(NatureAudio.tipMinVolume, NatureAudio.tipVolume);
+
+      final player = _tipPool[_tipCursor % _tipPool.length];
+      _tipCursor++;
+      await player.setVolume(volume);
+      await player.stop();
+      await player.resume();
+    } catch (error) {
+      debugPrint('NatureFeedbackService: tip failed ($error)');
+    }
+  }
+
+  Future<void> _loadTipPool() {
+    if (_disposed || _tipPool.isNotEmpty) return Future<void>.value();
+    return _tipLoading ??= _createTipPool();
+  }
+
+  Future<void> _createTipPool() async {
+    try {
+      for (var i = 0; i < _tipPoolSize; i++) {
+        final player = AudioPlayer()
+          ..setReleaseMode(ReleaseMode.stop)
+          ..setPlayerMode(PlayerMode.lowLatency);
+        await player.setAudioContext(_audioContext());
+        await player.setSource(AssetSource(NatureAudio.tipAsset));
+        await player.setVolume(NatureAudio.tipVolume);
+        if (_disposed) {
+          await player.dispose();
+          return;
+        }
+        _tipPool.add(player);
+      }
+    } catch (error) {
+      debugPrint('NatureFeedbackService: tip unavailable ($error)');
+    } finally {
+      _tipLoading = null;
+    }
+  }
+
   /// The order-placed moment: a firmer success haptic and a single water
   /// confirmation.
   ///
@@ -176,8 +269,11 @@ class NatureFeedbackService {
     _disposed = true;
     final player = _splashPlayer;
     _splashPlayer = null;
+    final tips = List<AudioPlayer>.from(_tipPool);
+    _tipPool.clear();
     try {
       await player?.dispose();
+      await Future.wait(tips.map((p) => p.dispose()));
     } catch (_) {
       // Already gone.
     }

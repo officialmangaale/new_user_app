@@ -5,7 +5,13 @@
 //
 //     dart run tool/generate_nature_audio.dart
 //
-// It writes `assets/audio/water_drop.wav`.
+// It writes two assets:
+//
+//   assets/audio/water_drop.wav  — the add-to-cart splash (broadband, percussive)
+//   assets/audio/water_tip.wav   — one drop landing in the clay pot (short, pitched)
+//
+// They are deliberately different sounds built from different models; see the
+// section headers below.
 //
 // ---------------------------------------------------------------------------
 // Why synthesise instead of shipping a recording
@@ -53,8 +59,12 @@ const double _durationSeconds = 0.42;
 const double _peakTarget = 0.52;
 
 void main(List<String> args) {
-  final samples = _renderWaterDrop();
-  final file = File('assets/audio/water_drop.wav');
+  _write('assets/audio/water_drop.wav', _renderWaterDrop());
+  _write('assets/audio/water_tip.wav', _renderWaterTip());
+}
+
+void _write(String path, List<double> samples) {
+  final file = File(path);
   file.parent.createSync(recursive: true);
   file.writeAsBytesSync(_encodeWav16(samples, _sampleRate));
 
@@ -66,6 +76,149 @@ void main(List<String> args) {
     '$_sampleRate Hz mono 16-bit · '
     '${(file.lengthSync() / 1024).toStringAsFixed(1)} KB',
   );
+}
+
+// ---------------------------------------------------------------------------
+// The tip: one drop landing in the water inside a clay pot
+// ---------------------------------------------------------------------------
+//
+// The opposite problem to the splash above. There, a single dominant rising
+// sinusoid was the failure mode to avoid — it is what makes a cartoon "bloop".
+// Here it is the whole point: a small drop entering water really does excite
+// one bubble, and that bubble's rising Minnaert tone is the "plink" everyone
+// recognises. What keeps it from sounding cartoonish is restraint — it is
+// quiet, it is short, and it sits inside the resonance of the vessel rather
+// than in free air.
+//
+// Three layers:
+//
+//   1. Entry   — a very small, very brief noise tick as the surface breaks.
+//   2. Bubble  — one damped sinusoid rising roughly an octave over ~35 ms.
+//   3. Cavity  — the pot's own note: a lower, softer resonance that the bubble
+//                sets ringing and which outlasts it. This is what makes it
+//                sound like a pot rather than a swimming pool.
+
+const double _tipDurationSeconds = 0.175;
+
+List<double> _renderWaterTip() {
+  final random = Random(19860214);
+  final length = (_tipDurationSeconds * _sampleRate).round();
+  final out = List<double>.filled(length, 0);
+
+  _addTipEntry(out, random);
+  _addTipBubble(out);
+  _addTipTexture(out, random);
+  _addPotCavity(out);
+
+  // Gentler than the splash's sweep: a tip is already narrow-band, and closing
+  // the filter hard would swallow the very partial that carries it.
+  _sweepLowPassInPlace(out, startHz: 7200, endHz: 2400);
+  _highPassInPlace(out, 220);
+
+  _applyTailFade(out, 0.028);
+  _normalise(out, 0.46);
+  return out;
+}
+
+/// The surface breaking. Barely there — enough to give the tone an onset.
+void _addTipEntry(List<double> out, Random random) {
+  final scratch = List<double>.filled(out.length, 0);
+  for (var i = 0; i < out.length; i++) {
+    final t = i / _sampleRate;
+    if (t > 0.02) break;
+    scratch[i] = (random.nextDouble() * 2 - 1) * exp(-t / 0.0035);
+  }
+  _highPassInPlace(scratch, 1800);
+  _lowPassInPlace(scratch, 7000);
+  for (var i = 0; i < out.length; i++) {
+    out[i] += scratch[i] * 0.22;
+  }
+}
+
+/// Texture: a handful of tiny secondary bubbles plus a short wet fizz.
+///
+/// Without this the sound measures as almost pure tone — spectral flatness
+/// 0.01, one partial holding a quarter of the energy — and a near-pure tone is
+/// heard as an electronic bloop no matter how physically it was derived. These
+/// layers are individually inaudible; collectively they are the difference
+/// between "water" and "notification chime".
+void _addTipTexture(List<double> out, Random random) {
+  // Five very quiet micro-bubbles, scattered high and early.
+  for (var b = 0; b < 5; b++) {
+    final onset = 0.001 + 0.016 * random.nextDouble();
+    final baseFrequency = 1900 + random.nextDouble() * 3600;
+    final life = 0.006 + random.nextDouble() * 0.012;
+    final rise = 1.2 + random.nextDouble() * 0.9;
+    final amplitude = 0.028 + random.nextDouble() * 0.038;
+    final startIndex = (onset * _sampleRate).round();
+
+    var phase = random.nextDouble() * 2 * pi;
+    for (var i = startIndex; i < out.length; i++) {
+      final t = (i - startIndex) / _sampleRate;
+      final frequency = baseFrequency * (1 + (rise - 1) * (t / life));
+      phase += 2 * pi * frequency / _sampleRate;
+      out[i] += sin(phase) * exp(-t / life) * amplitude;
+    }
+  }
+
+  // A brief wet fizz around the entry.
+  final fizz = List<double>.filled(out.length, 0);
+  for (var i = 0; i < out.length; i++) {
+    final t = i / _sampleRate;
+    if (t > 0.09) break;
+    final rise = 1 - exp(-t / 0.002);
+    fizz[i] = (random.nextDouble() * 2 - 1) * rise * exp(-t / 0.022);
+  }
+  _sweepBandInPlace(fizz, highStart: 1500, highEnd: 700, lowStart: 7500, lowEnd: 3000);
+  for (var i = 0; i < out.length; i++) {
+    out[i] += fizz[i] * 0.17;
+  }
+}
+
+/// The bubble. One of them, rising about an octave as it collapses.
+void _addTipBubble(List<double> out) {
+  const baseFrequency = 1180.0;
+  const rise = 2.05;
+  const life = 0.034;
+
+  var phase = 0.0;
+  for (var i = 0; i < out.length; i++) {
+    final t = i / _sampleRate;
+    final progress = t / life;
+    final frequency = baseFrequency * (1 + (rise - 1) * progress);
+    phase += 2 * pi * frequency / _sampleRate;
+    final attack = 1 - exp(-t / 0.0007);
+    out[i] += sin(phase) * attack * exp(-t / life) * 0.62;
+  }
+}
+
+/// The vessel. A softer, lower partial that keeps ringing after the bubble has
+/// gone, with a touch of inharmonicity so it reads as fired clay rather than a
+/// tuning fork.
+void _addPotCavity(List<double> out) {
+  // Kept deliberately quiet and short. An earlier pass had the 512 Hz partial
+  // at 0.30 with an 85 ms decay; it held 26% of the file's energy on its own
+  // and the result measured as a pure tone. The vessel should colour the sound,
+  // not be the sound.
+  const partials = <List<double>>[
+    // frequency, amplitude, decay seconds
+    [512, 0.20, 0.062],
+    [781, 0.085, 0.040],
+    [1367, 0.05, 0.028],
+  ];
+
+  for (final partial in partials) {
+    final frequency = partial[0];
+    final amplitude = partial[1];
+    final decay = partial[2];
+    var phase = pi / 3;
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sampleRate;
+      phase += 2 * pi * frequency / _sampleRate;
+      final attack = 1 - exp(-t / 0.0016);
+      out[i] += sin(phase) * attack * exp(-t / decay) * amplitude;
+    }
+  }
 }
 
 List<double> _renderWaterDrop() {

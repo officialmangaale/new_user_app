@@ -48,7 +48,7 @@ class NatureButton extends ConsumerStatefulWidget {
     required this.builder,
     required this.onTap,
     this.haptic = NatureHaptic.tap,
-    this.borderRadius = 14,
+    this.borderRadius,
     this.rippleColor,
     this.compress = true,
     super.key,
@@ -60,7 +60,10 @@ class NatureButton extends ConsumerStatefulWidget {
   final VoidCallback? onTap;
 
   final NatureHaptic haptic;
-  final double borderRadius;
+
+  /// Clips the ripple to the wrapped control's silhouette. Null falls back to
+  /// a modest uniform radius.
+  final BorderRadius? borderRadius;
   final Color? rippleColor;
 
   /// Whether the control compresses on press.
@@ -99,7 +102,9 @@ class _NatureButtonState extends ConsumerState<NatureButton> {
       enabled: motion,
       borderRadius: widget.borderRadius,
       color: widget.rippleColor,
-      onPressedChanged: widget.compress && motion ? _handlePressedChanged : null,
+      onPressedChanged: widget.compress && motion
+          ? _handlePressedChanged
+          : null,
       // The haptic and the real callback are bundled here so the wrapped
       // control has one handler to call and cannot fire them separately.
       onTap: widget.onTap == null ? null : _handleTap,

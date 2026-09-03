@@ -12,10 +12,8 @@ import '../nature_tokens.dart';
 /// that control stays the one and only path to the callback. This is what
 /// keeps "execute the existing callback exactly once" structurally true rather
 /// than merely tested: there is no second recognizer that could fire.
-typedef NatureTapBuilder = Widget Function(
-  BuildContext context,
-  VoidCallback handleTap,
-);
+typedef NatureTapBuilder =
+    Widget Function(BuildContext context, VoidCallback handleTap);
 
 /// Wraps a control and paints a soft water ripple from the exact point the
 /// finger landed.
@@ -32,7 +30,7 @@ class WaterTapRipple extends StatefulWidget {
     required this.builder,
     required this.onTap,
     this.enabled = true,
-    this.borderRadius = 14,
+    this.borderRadius,
     this.color,
     this.onPressedChanged,
     super.key,
@@ -48,7 +46,11 @@ class WaterTapRipple extends StatefulWidget {
   /// This is the reduced-motion path.
   final bool enabled;
 
-  final double borderRadius;
+  /// Clips the ripple to the control's own silhouette. Null means a modest
+  /// uniform radius, which suits a rectangular control; the leaf ADD button
+  /// passes its asymmetric radii so the ripple cannot bleed past the shape.
+  final BorderRadius? borderRadius;
+
   final Color? color;
 
   /// Reports press state so a parent can add compression without installing a
@@ -129,7 +131,7 @@ class _WaterTapRippleState extends State<WaterTapRipple>
       onPointerCancel: (_) => _setPressed(false),
       child: RepaintBoundary(
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
+          borderRadius: widget.borderRadius ?? BorderRadius.circular(14),
           child: AnimatedBuilder(
             animation: _controller,
             // Passed through untouched so the control itself does not rebuild

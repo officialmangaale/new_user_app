@@ -70,9 +70,10 @@ flutter:
   assets:
     - assets/images/home-hero-food.png
     - assets/images/home-hero-grocery.png
-    # Nature layer. Regenerate with:
+    # Nature layer. Regenerate both with:
     #   dart run tool/generate_nature_audio.dart
     - assets/audio/water_drop.wav
+    - assets/audio/water_tip.wav
 
   # To add assets to your application, add an assets section, like this:
   # assets:

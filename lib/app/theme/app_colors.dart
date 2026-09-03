@@ -83,4 +83,43 @@ abstract final class NatureColors {
   /// than the existing neutral [AppColors.shadow].
   static const shadowNear = Color(0x14183A33);
   static const shadowFar = Color(0x1F183A33);
+
+  // ---------------------------------------------------------------------------
+  // Leaf ADD button
+  // ---------------------------------------------------------------------------
+
+  /// Fill for the leaf-shaped ADD button, turquoise end.
+  ///
+  /// Deliberately darker than [AppColors.primary]. White on `primary` measures
+  /// 4.19:1, which fails the 4.5:1 minimum for the button's 14 px bold label;
+  /// this measures **5.85:1**.
+  static const leafFillTurquoise = Color(0xFF0B7267);
+
+  /// Fill for the leaf button, fresh-green end of the gradient.
+  ///
+  /// Green enough to read as botanical, dark enough to keep the label legible
+  /// across the whole sweep — white on this measures **5.33:1**.
+  static const leafFillGreen = Color(0xFF147A55);
+
+  /// The leaf's centre vein, drawn over the fill at low opacity.
+  static const leafVein = Color(0x47FFFFFF);
+
+  // ---------------------------------------------------------------------------
+  // Clay pot (matka) cart
+  // ---------------------------------------------------------------------------
+
+  /// Body of the pot — warm earthen terracotta.
+  static const clayBody = Color(0xFFB9613C);
+
+  /// Shaded lower body and the rim, for a little turned-pottery depth.
+  static const clayDeep = Color(0xFF8E4527);
+
+  /// Highlight along the pot's shoulder.
+  static const clayLight = Color(0xFFD98A63);
+
+  /// The water sitting inside the pot's mouth.
+  static const potWater = Color(0xFF2AA79A);
+
+  /// Bright surface line where the water meets the light.
+  static const potWaterLight = Color(0xFF7FD9CE);
 }

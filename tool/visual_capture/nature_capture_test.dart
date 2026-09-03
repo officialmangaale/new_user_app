@@ -35,9 +35,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:turquoise_delivery/app/theme/app_colors.dart';
 import 'package:turquoise_delivery/app/theme/app_theme.dart';
 import 'package:turquoise_delivery/core/nature/cart_drop/add_to_cart_drop_animation.dart';
-import 'package:turquoise_delivery/core/nature/cart_drop/cart_beacon.dart';
+import 'package:turquoise_delivery/core/nature/cart_drop/clay_pot.dart';
 import 'package:turquoise_delivery/core/nature/nature_preferences.dart';
 import 'package:turquoise_delivery/core/nature/widgets/leaf_accent.dart';
+import 'package:turquoise_delivery/core/nature/widgets/leaf_add_button.dart';
 import 'package:turquoise_delivery/core/nature/widgets/nature_refresh_indicator.dart';
 import 'package:turquoise_delivery/core/nature/widgets/order_success_ripple.dart';
 import 'package:turquoise_delivery/core/widgets/app_ui.dart';
@@ -89,7 +90,7 @@ void main() {
       tester,
       const Size(280, 116),
       _panel(
-        label: 'AFTER · at rest',
+        label: 'AFTER · leaf, at rest',
         child: QuantityControl(
           quantity: 0,
           onAdd: () {},
@@ -102,7 +103,7 @@ void main() {
 
     // Pressed left of centre, so the ring is visibly off-centre — the whole
     // point is that it starts where the finger landed, not at the middle.
-    final rect = tester.getRect(find.byType(OutlinedButton));
+    final rect = tester.getRect(find.byType(LeafAddButton));
     await tester.tapAt(Offset(rect.left + rect.width * 0.22, rect.center.dy));
 
     // Three frames across the ripple's 420 ms life, so the review can judge
@@ -163,11 +164,11 @@ void main() {
   // 3. Cart icon
   // -------------------------------------------------------------------------
 
-  testWidgets('03 cart beacon', (tester) async {
+  testWidgets('03 clay pot cart', (tester) async {
     await _frame(
       tester,
       const Size(240, 130),
-      _panel(label: 'BEFORE', child: _cartIcon(badge: 3)),
+      _panel(label: 'BEFORE · count square', child: _cartIcon(badge: 3)),
     );
     await _save(tester, '03a-cart-before');
 
@@ -175,19 +176,16 @@ void main() {
       tester,
       const Size(240, 130),
       _panel(
-        label: 'AFTER · calm turquoise disc',
-        child: CartBeacon(
-          discSize: 54,
-          builder: (context, scale) => _cartIcon(badge: 3, badgeScale: scale),
-        ),
+        label: 'AFTER · clay pot',
+        child: ClayPotCart(count: 3, onTap: () {}),
       ),
     );
-    await _save(tester, '03b-cart-after-idle');
+    await _save(tester, '03b-pot-idle');
 
-    (tester.state<State>(find.byType(CartBeacon)) as dynamic).playArrival();
+    (tester.state<State>(find.byType(ClayPotCart)) as dynamic).playArrival();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 130));
-    await _save(tester, '03c-cart-after-arrival');
+    await tester.pump(const Duration(milliseconds: 120));
+    await _save(tester, '03c-pot-impact');
     await tester.pumpAndSettle();
   });
 
@@ -195,44 +193,43 @@ void main() {
   // 4. The drop in flight
   // -------------------------------------------------------------------------
 
-  testWidgets('04 drop flight', (tester) async {
+  testWidgets('04 leaf to pot journey', (tester) async {
     final imageKey = GlobalKey();
+    final leafKey = GlobalKey();
     late WidgetRef captured;
     late BuildContext innerContext;
 
     await _frame(
       tester,
-      const Size(380, 320),
+      const Size(380, 420),
       ColoredBox(
         color: const Color(0xFFF7FAF8),
         child: Consumer(
           builder: (context, ref, _) {
             captured = ref;
-            // Must be a context inside MaterialApp: the drop is an overlay
+            // Must be a context inside MaterialApp: the sequence is an overlay
             // entry, and the app's Overlay is below the capture boundary.
             innerContext = context;
             return Stack(
               children: [
-                // A stand-in for the product image. The real app flies the
-                // photo already in the image cache; this harness has no
-                // network and `cached_network_image` needs plugins the test
-                // environment does not provide, so a flat swatch stands in.
-                // What is under review here is the path, shape, scaling and
-                // turquoise wash — all of which are the real thing.
+                // Stands in for the product photo. The real app carries the
+                // image already in the cache; this harness has no network and
+                // cached_network_image needs plugins the test VM lacks. Path,
+                // shape, scaling and tint are the shipping code.
                 Positioned(
                   left: 26,
-                  bottom: 46,
+                  top: 40,
                   child: Container(
                     key: imageKey,
-                    width: 120,
-                    height: 104,
+                    width: 110,
+                    height: 92,
                     decoration: BoxDecoration(
                       color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     alignment: Alignment.center,
                     child: const Text(
-                      'product\nimage',
+                      'product image',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,
@@ -241,14 +238,26 @@ void main() {
                     ),
                   ),
                 ),
+                // The leaf, where the product lands and becomes water.
                 Positioned(
-                  right: 26,
-                  top: 22,
-                  child: CartBeacon(
-                    discSize: 54,
-                    builder: (context, scale) =>
-                        _cartIcon(badge: 2, badgeScale: scale),
+                  left: 54,
+                  top: 150,
+                  child: SizedBox(
+                    height: 38,
+                    child: QuantityControl(
+                      quantity: 0,
+                      addButtonKey: leafKey,
+                      onAdd: () {},
+                      onRemove: () {},
+                      compact: true,
+                    ),
                   ),
+                ),
+                // The pot, at the bottom, so the drop falls downward into it.
+                Positioned(
+                  left: 40,
+                  bottom: 30,
+                  child: ClayPotCart(count: 2, onTap: () {}),
                 ),
               ],
             );
@@ -263,17 +272,20 @@ void main() {
           // ignore: use_build_context_synchronously
           context: innerContext,
           item: _item,
-          isFirstAdd: true,
-          sourceKey: imageKey,
+          unitsAdded: 1,
+          origin: ProductAddOrigin(
+            imageKey: imageKey,
+            addButtonKey: leafKey,
+          ),
         );
     await tester.pump();
 
     // Cumulative: each entry is the gap since the previous frame.
     var elapsed = 0;
-    for (final step in <int>[100, 130, 130, 130]) {
+    for (final step in <int>[90, 160, 200, 150, 150, 90, 130]) {
       await tester.pump(Duration(milliseconds: step));
       elapsed += step;
-      await _save(tester, '04-drop-flight-${elapsed}ms');
+      await _save(tester, '04-journey-${elapsed}ms');
     }
     await tester.pump(const Duration(milliseconds: 600));
   });

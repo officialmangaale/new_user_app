@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/cart_drop/cart_beacon.dart';
 import '../../../core/nature/widgets/leaf_accent.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
@@ -272,8 +271,8 @@ class DeliveryHomeFeed extends ConsumerWidget {
                   ),
                 ),
               ),
-              onAdd: (imageKey) =>
-                  addItemToCart(context, ref, item, sourceKey: imageKey),
+              onAdd: (origin) =>
+                  addItemToCart(context, ref, item, origin: origin),
               onRemove: () => ref
                   .read(cartControllerProvider.notifier)
                   .removeItemById(item.id),
@@ -559,19 +558,16 @@ class _HeroHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // The cart is the collection point every water drop flows toward, so
-        // it registers itself as the flight target and owns the arrival
-        // ripple. The disc is a shade wider than the button, reading as a calm
-        // turquoise halo rather than recolouring the control itself.
-        CartBeacon(
-          discSize: 54,
-          builder: (context, badgeScale) => _HeaderCircleAction(
-            tooltip: 'Cart',
-            icon: Icons.shopping_cart_outlined,
-            badgeCount: cartCount,
-            badgeScale: badgeScale,
-            onPressed: onCartTap,
-          ),
+        // A plain cart icon again. The collection point is now the clay pot in
+        // the summary bar at the bottom of the screen, and water has to fall
+        // *down* into it — so this icon deliberately stops being a target and
+        // loses the turquoise disc and arrival ripple it wore in Phase 2. Its
+        // position, route and badge are exactly as they were.
+        _HeaderCircleAction(
+          tooltip: 'Cart',
+          icon: Icons.shopping_cart_outlined,
+          badgeCount: cartCount,
+          onPressed: onCartTap,
         ),
         const SizedBox(width: 8),
         _HeaderCircleAction(
@@ -590,26 +586,12 @@ class _HeaderCircleAction extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     this.badgeCount = 0,
-    this.badgeScale,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
   final int badgeCount;
-
-  /// Supplied by [CartBeacon] so the count badge can acknowledge an arriving
-  /// item. Null everywhere else, which leaves the badge completely static.
-  final Animation<double>? badgeScale;
-
-  /// Wraps the badge in a scale transition only when a beacon supplied one, so
-  /// the profile button and any other user of this widget rebuilds exactly as
-  /// often as it did before.
-  Widget _maybeBounce(Widget badge) {
-    final scale = badgeScale;
-    if (scale == null) return badge;
-    return ScaleTransition(scale: scale, child: badge);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -633,23 +615,21 @@ class _HeaderCircleAction extends StatelessWidget {
           Positioned(
             right: -3,
             top: -4,
-            child: _maybeBounce(
-              Container(
-                constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  badgeCount > 99 ? '99+' : '$badgeCount',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    height: 1,
-                    fontWeight: FontWeight.w700,
-                  ),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                badgeCount > 99 ? '99+' : '$badgeCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  height: 1,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),

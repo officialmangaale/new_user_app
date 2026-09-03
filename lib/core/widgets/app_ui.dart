@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../shared/models/app_models.dart';
+import '../nature/nature_tokens.dart';
+import '../nature/widgets/leaf_add_button.dart';
 import '../nature/widgets/nature_button.dart';
 
 class AppNetworkImage extends StatelessWidget {
@@ -397,6 +399,7 @@ class QuantityControl extends StatelessWidget {
     required this.onAdd,
     required this.onRemove,
     this.compact = false,
+    this.addButtonKey,
     super.key,
   });
 
@@ -404,6 +407,11 @@ class QuantityControl extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onRemove;
   final bool compact;
+
+  /// Attached to the leaf ADD button so the add-to-cart animation knows where
+  /// the leaf is and can land the product on it. Null everywhere the animation
+  /// is not wanted, which simply means the drop starts from the pot instead.
+  final GlobalKey? addButtonKey;
 
   @override
   Widget build(BuildContext context) {
@@ -413,7 +421,8 @@ class QuantityControl extends StatelessWidget {
             height: compact ? 38 : 44,
             // The ADD button is the app's signature interaction, so it gets the
             // water treatment: a ripple from the touch point and a small
-            // compression.
+            // compression. Its silhouette is a leaf — the surface that receives
+            // the product before the product becomes water.
             //
             // The haptic is deliberately NOT fired here. For this button it
             // belongs to the moment the cart actually changes, which only
@@ -421,17 +430,12 @@ class QuantityControl extends StatelessWidget {
             // that are refused. The previous `HapticFeedback.selectionClick()`
             // on this branch has moved there rather than being duplicated.
             child: NatureButton(
+              key: addButtonKey,
               onTap: onAdd,
               haptic: NatureHaptic.none,
-              borderRadius: 16,
-              builder: (context, handleTap) => OutlinedButton(
-                onPressed: handleTap,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: Size(compact ? 72 : 88, compact ? 38 : 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 13),
-                ),
-                child: const Text('ADD'),
-              ),
+              borderRadius: NatureMetrics.leafRadius(compact ? 38 : 44),
+              builder: (context, handleTap) =>
+                  LeafAddButton(onPressed: handleTap, compact: compact),
             ),
           )
         : Container(
