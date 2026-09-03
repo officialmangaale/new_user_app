@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/cart_drop/add_to_cart_drop_animation.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
@@ -85,84 +86,86 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       body: _query.length < 2
           ? EmptyState(
               icon: Icons.search_rounded,
-              title: grocery ? 'Find daily essentials' : 'Find something to eat',
+              title: grocery
+                  ? 'Find daily essentials'
+                  : 'Find something to eat',
               message: grocery
                   ? 'Type at least two letters to search nearby grocery products.'
                   : 'Type at least two letters to search restaurants.',
             )
           : grocery
-              ? _GrocerySearchResults(query: _query)
-              : AsyncView<CatalogSearchResults>(
-                  value: ref.watch(catalogSearchResultsProvider(_query)),
-                  onRetry: () =>
-                      ref.invalidate(catalogSearchResultsProvider(_query)),
-                  isEmpty: (results) => results.isEmpty,
-                  empty: EmptyState(
-                    icon: Icons.search_off_rounded,
-                    title: 'No matches for “$_query”',
-                    message:
-                        'Try a different dish, cuisine or restaurant name.',
-                  ),
-                  builder: (results) => ListView(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    children: [
-                      if (results.items.isNotEmpty) ...[
-                        const _SearchSectionTitle(title: 'Menu items'),
-                        const SizedBox(height: 10),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
+          ? _GrocerySearchResults(query: _query)
+          : AsyncView<CatalogSearchResults>(
+              value: ref.watch(catalogSearchResultsProvider(_query)),
+              onRetry: () =>
+                  ref.invalidate(catalogSearchResultsProvider(_query)),
+              isEmpty: (results) => results.isEmpty,
+              empty: EmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'No matches for “$_query”',
+                message: 'Try a different dish, cuisine or restaurant name.',
+              ),
+              builder: (results) => ListView(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                children: [
+                  if (results.items.isNotEmpty) ...[
+                    const _SearchSectionTitle(title: 'Menu items'),
+                    const SizedBox(height: 10),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 220,
                             mainAxisExtent: 278,
                             crossAxisSpacing: AppSpacing.sm,
                             mainAxisSpacing: AppSpacing.sm,
                           ),
-                          itemCount: results.items.length,
-                          itemBuilder: (context, index) {
-                            final item = results.items[index];
-                            return ProductCard(
-                              width: double.infinity,
-                              item: item,
-                              quantity: ref.watch(
-                                cartControllerProvider.select(
-                                  (state) => state.quantityForItem(
-                                    item.id,
-                                    type: item.type,
-                                    storeId: item.storeId,
-                                  ),
-                                ),
+                      itemCount: results.items.length,
+                      itemBuilder: (context, index) {
+                        final item = results.items[index];
+                        return ProductCard(
+                          width: double.infinity,
+                          item: item,
+                          quantity: ref.watch(
+                            cartControllerProvider.select(
+                              (state) => state.quantityForItem(
+                                item.id,
+                                type: item.type,
+                                storeId: item.storeId,
                               ),
-                              onAdd: () => _addSearchItem(context, ref, item),
-                              onRemove: () => ref
-                                  .read(cartControllerProvider.notifier)
-                                  .removeItemById(item.id),
-                              onTap: () => context.push('/food-item/${item.id}'),
-                            );
-                          },
-                        ),
-                      ],
-                      if (results.restaurants.isNotEmpty) ...[
-                        if (results.items.isNotEmpty)
-                          const SizedBox(height: AppSpacing.lg),
-                        const _SearchSectionTitle(title: 'Restaurants'),
-                        const SizedBox(height: 10),
-                        for (final restaurant in results.restaurants) ...[
-                          SizedBox(
-                            height: 254,
-                            child: RestaurantCard(
-                              restaurant: restaurant,
-                              onTap: () =>
-                                  context.push('/restaurant/${restaurant.id}'),
                             ),
                           ),
-                          const SizedBox(height: 12),
-                        ],
-                      ],
+                          onAdd: (origin) =>
+                              _addSearchItem(context, ref, item, origin),
+                          onRemove: () => ref
+                              .read(cartControllerProvider.notifier)
+                              .removeItemById(item.id),
+                          onTap: () => context.push('/food-item/${item.id}'),
+                        );
+                      },
+                    ),
+                  ],
+                  if (results.restaurants.isNotEmpty) ...[
+                    if (results.items.isNotEmpty)
+                      const SizedBox(height: AppSpacing.lg),
+                    const _SearchSectionTitle(title: 'Restaurants'),
+                    const SizedBox(height: 10),
+                    for (final restaurant in results.restaurants) ...[
+                      SizedBox(
+                        height: 254,
+                        child: RestaurantCard(
+                          restaurant: restaurant,
+                          onTap: () =>
+                              context.push('/restaurant/${restaurant.id}'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                     ],
-                  ),
-                ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }
@@ -170,12 +173,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 Future<void> _addSearchItem(
   BuildContext context,
   WidgetRef ref,
-  CatalogItem item,
-) async {
+  CatalogItem item, [
+  ProductAddOrigin? origin,
+]) async {
   try {
     final detailed = await ref.read(itemDetailProvider(item.id).future);
     if (!context.mounted) return;
-    await addItemToCart(context, ref, detailed);
+    await addItemToCart(context, ref, detailed, origin: origin);
   } catch (_) {
     if (context.mounted) context.push('/food-item/${item.id}');
   }
@@ -229,7 +233,8 @@ class _GrocerySearchResults extends ConsumerWidget {
                 ),
               ),
             ),
-            onAdd: () => addItemToCart(context, ref, item),
+            onAdd: (origin) =>
+                addItemToCart(context, ref, item, origin: origin),
             onRemove: () => ref
                 .read(cartControllerProvider.notifier)
                 .removeItemById(item.id),

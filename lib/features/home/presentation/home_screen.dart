@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/widgets/leaf_accent.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/premium_components.dart';
@@ -127,94 +128,110 @@ class DeliveryHomeFeed extends ConsumerWidget {
       );
     }
 
-    return SafeArea(
-      bottom: false,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.025, 0),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
+    return ColoredBox(
+      // Home's own ground, applied here rather than to the global theme so the
+      // pilot is contained: every other screen keeps AppColors.background until
+      // this treatment is reviewed.
+      color: NatureColors.offWhite,
+      child: SafeArea(
+        bottom: false,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.025, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
           ),
-        ),
-        child: CustomScrollView(
-          key: ValueKey(state.mode),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _HomeHero(
-                mode: state.mode,
-                locationLabel: _deliveryLocationLabel(selectedAddress),
-                cartCount: ref.watch(cartCountProvider),
-                onLocationTap: () => _showLocationSheet(context, ref),
-                onCartTap: () => context.push('/cart'),
-                onProfileTap: () => context.push('/profile'),
-                onSearchTap: () => context.push('/search'),
-              ),
-            ),
-            SliverToBoxAdapter(child: _CategoryStrip(grocery: grocery)),
-            if (banners.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _OfferCarousel(banners: banners),
-                ),
-              ),
-            ],
-            if (merchants.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _HomeSectionHeader(
-                    title: grocery ? 'Stores near you' : 'Popular near you',
-                    onViewAll: () => context.push('/search'),
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
+          child: CustomScrollView(
+            key: ValueKey(state.mode),
+            slivers: [
               SliverToBoxAdapter(
-                child: _RestaurantStrip(
-                  restaurants: merchants,
-                  grocery: grocery,
+                child: _HomeHero(
+                  mode: state.mode,
+                  locationLabel: _deliveryLocationLabel(selectedAddress),
+                  cartCount: ref.watch(cartCountProvider),
+                  onLocationTap: () => _showLocationSheet(context, ref),
+                  onCartTap: () => context.push('/cart'),
+                  onProfileTap: () => context.push('/profile'),
+                  onSearchTap: () => context.push('/search'),
                 ),
               ),
-            ],
-            if (items.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPadding,
+              SliverToBoxAdapter(child: _CategoryStrip(grocery: grocery)),
+              if (banners.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.md),
                 ),
-                sliver: SliverToBoxAdapter(
-                  child: _HomeSectionHeader(
-                    title: grocery ? 'Popular groceries' : 'Popular dishes',
-                    onViewAll: () => context.push('/search'),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _OfferCarousel(banners: banners),
                   ),
                 ),
+              ],
+              if (merchants.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.lg),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _HomeSectionHeader(
+                      title: grocery ? 'Stores near you' : 'Popular near you',
+                      onViewAll: () => context.push('/search'),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.sm),
+                ),
+                SliverToBoxAdapter(
+                  child: _RestaurantStrip(
+                    restaurants: merchants,
+                    grocery: grocery,
+                  ),
+                ),
+              ],
+              if (items.isNotEmpty) ...[
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.lg),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPadding,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _HomeSectionHeader(
+                      title: grocery ? 'Popular groceries' : 'Popular dishes',
+                      onViewAll: () => context.push('/search'),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.sm),
+                ),
+                _productStrip(ref, items, grocery),
+              ],
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height:
+                      AppSpacing.navigationClearance +
+                      (cartVisible ? 72 : 0) +
+                      AppSpacing.md,
+                ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
-              _productStrip(ref, items, grocery),
             ],
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height:
-                    AppSpacing.navigationClearance +
-                    (cartVisible ? 72 : 0) +
-                    AppSpacing.md,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -254,7 +271,8 @@ class DeliveryHomeFeed extends ConsumerWidget {
                   ),
                 ),
               ),
-              onAdd: () => addItemToCart(context, ref, item),
+              onAdd: (origin) =>
+                  addItemToCart(context, ref, item, origin: origin),
               onRemove: () => ref
                   .read(cartControllerProvider.notifier)
                   .removeItemById(item.id),
@@ -540,6 +558,11 @@ class _HeroHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
+        // A plain cart icon again. The collection point is now the clay pot in
+        // the summary bar at the bottom of the screen, and water has to fall
+        // *down* into it — so this icon deliberately stops being a target and
+        // loses the turquoise disc and arrival ripple it wore in Phase 2. Its
+        // position, route and badge are exactly as they were.
         _HeaderCircleAction(
           tooltip: 'Cart',
           icon: Icons.shopping_cart_outlined,
@@ -963,6 +986,13 @@ class _HomeSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        // A small leaf beside the heading. Decoration only: it sits before the
+        // text rather than over it, is excluded from semantics, and ignores
+        // pointers, so the heading reads and behaves exactly as it did.
+        const Padding(
+          padding: EdgeInsets.only(right: 7, bottom: 2),
+          child: LeafAccent(size: 15),
+        ),
         Expanded(
           child: Text(
             title,

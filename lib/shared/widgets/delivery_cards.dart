@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../core/nature/cart_drop/add_to_cart_drop_animation.dart';
+import '../../core/nature/cart_drop/clay_pot.dart';
 import '../../core/widgets/app_ui.dart';
 import '../models/app_models.dart';
 
@@ -202,7 +204,15 @@ String _restaurantFooterMeta(Restaurant restaurant) {
   return parts.join('  •  ');
 }
 
-class ProductCard extends StatelessWidget {
+/// Signature for [ProductCard.onAdd].
+///
+/// The card hands back the two places the animation needs: its own product
+/// image, which the drop carries, and its leaf ADD button, which the product
+/// lands on before becoming water. A caller that ignores the origin still adds
+/// to the cart exactly as before and simply gets no animation.
+typedef ProductAddCallback = void Function(ProductAddOrigin origin);
+
+class ProductCard extends StatefulWidget {
   const ProductCard({
     required this.item,
     required this.quantity,
@@ -215,13 +225,34 @@ class ProductCard extends StatelessWidget {
 
   final CatalogItem item;
   final int quantity;
-  final VoidCallback onAdd;
+  final ProductAddCallback onAdd;
   final VoidCallback onRemove;
   final VoidCallback? onTap;
   final double width;
 
   @override
+  State<ProductCard> createState() => _ProductCardState();
+}
+
+class _ProductCardState extends State<ProductCard> {
+  /// Held in state so it is stable across rebuilds. A `GlobalKey` recreated on
+  /// every build would detach and reattach the image element each frame, and
+  /// this card rebuilds often — it watches the cart quantity.
+  final GlobalKey _imageKey = GlobalKey();
+
+  /// The leaf the product lands on. Held in state alongside the image key for
+  /// the same reason: this card rebuilds on every cart change, and a GlobalKey
+  /// recreated per build would detach and reattach its element each frame.
+  final GlobalKey _addKey = GlobalKey();
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final quantity = widget.quantity;
+    final onRemove = widget.onRemove;
+    final onTap = widget.onTap;
+    final width = widget.width;
+
     return SizedBox(
       width: width,
       child: Card(
@@ -237,6 +268,7 @@ class ProductCard extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     AppNetworkImage(
+                      key: _imageKey,
                       url: item.imageUrl,
                       width: double.infinity,
                       height: 112,
@@ -305,7 +337,13 @@ class ProductCard extends StatelessWidget {
                     ),
                     QuantityControl(
                       quantity: quantity,
-                      onAdd: onAdd,
+                      addButtonKey: _addKey,
+                      onAdd: () => widget.onAdd(
+                        ProductAddOrigin(
+                          imageKey: _imageKey,
+                          addButtonKey: _addKey,
+                        ),
+                      ),
                       onRemove: onRemove,
                       compact: true,
                     ),
@@ -686,22 +724,12 @@ class CartSummaryBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '$count',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
+          // The clay pot stands exactly where the count square stood — same
+          // 38x38 slot, so nothing on this bar moves. It carries the same
+          // count and opens the same route; it is a visual wrapper around the
+          // existing control, not a new one. It is also the destination the
+          // falling water drops aim at.
+          ClayPotCart(count: count, onTap: onTap),
           const SizedBox(width: 11),
           Expanded(
             child: Column(

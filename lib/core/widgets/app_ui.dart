@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../shared/models/app_models.dart';
+import '../nature/nature_tokens.dart';
+import '../nature/widgets/leaf_add_button.dart';
+import '../nature/widgets/nature_button.dart';
 
 class AppNetworkImage extends StatelessWidget {
   const AppNetworkImage({
@@ -396,6 +399,7 @@ class QuantityControl extends StatelessWidget {
     required this.onAdd,
     required this.onRemove,
     this.compact = false,
+    this.addButtonKey,
     super.key,
   });
 
@@ -404,22 +408,34 @@ class QuantityControl extends StatelessWidget {
   final VoidCallback onRemove;
   final bool compact;
 
+  /// Attached to the leaf ADD button so the add-to-cart animation knows where
+  /// the leaf is and can land the product on it. Null everywhere the animation
+  /// is not wanted, which simply means the drop starts from the pot instead.
+  final GlobalKey? addButtonKey;
+
   @override
   Widget build(BuildContext context) {
     final child = quantity == 0
         ? SizedBox(
             key: const ValueKey('add'),
             height: compact ? 38 : 44,
-            child: OutlinedButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onAdd();
-              },
-              style: OutlinedButton.styleFrom(
-                minimumSize: Size(compact ? 72 : 88, compact ? 38 : 44),
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-              ),
-              child: const Text('ADD'),
+            // The ADD button is the app's signature interaction, so it gets the
+            // water treatment: a ripple from the touch point and a small
+            // compression. Its silhouette is a leaf — the surface that receives
+            // the product before the product becomes water.
+            //
+            // The haptic is deliberately NOT fired here. For this button it
+            // belongs to the moment the cart actually changes, which only
+            // `addItemToCart` knows about — firing on tap would buzz for adds
+            // that are refused. The previous `HapticFeedback.selectionClick()`
+            // on this branch has moved there rather than being duplicated.
+            child: NatureButton(
+              key: addButtonKey,
+              onTap: onAdd,
+              haptic: NatureHaptic.none,
+              borderRadius: NatureMetrics.leafRadius(compact ? 38 : 44),
+              builder: (context, handleTap) =>
+                  LeafAddButton(onPressed: handleTap, compact: compact),
             ),
           )
         : Container(

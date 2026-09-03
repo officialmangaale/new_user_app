@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/nature_preferences.dart';
 import '../../../core/services/api_exception.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/repositories/account_repository.dart';
@@ -183,6 +184,7 @@ class ProfileScreen extends ConsumerWidget {
           ],
           authenticated: authenticated,
         ),
+        const _NatureExperienceSection(),
         _MenuSection(
           title: 'About',
           entries: [
@@ -498,6 +500,109 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 3),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
+    );
+  }
+}
+
+/// Inline controls for the nature presentation layer.
+///
+/// Deliberately switches in place rather than another row that pushes an
+/// `/info/...` page: these are two booleans, and making someone navigate to
+/// flip one would be worse than the setting is worth. No new route, no new
+/// navigation argument, nothing for the router to learn.
+class _NatureExperienceSection extends ConsumerWidget {
+  const _NatureExperienceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preferences = ref.watch(naturePreferencesProvider);
+    final notifier = ref.read(naturePreferencesProvider.notifier);
+    // The OS setting wins, so say so rather than showing a control that looks
+    // like it works and does not.
+    final platformReduced =
+        MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              'NATURE EXPERIENCE',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                letterSpacing: 1.1,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile.adaptive(
+                  value: preferences.soundsEnabled,
+                  onChanged: notifier.setSoundsEnabled,
+                  secondary: const _NatureSettingIcon(
+                    Icons.water_drop_outlined,
+                  ),
+                  title: const Text(
+                    'Nature Sounds',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'A soft water splash when you add something to your cart',
+                  ),
+                ),
+                const Divider(height: 1, indent: 66),
+                SwitchListTile.adaptive(
+                  value: preferences.motionMode == NatureMotionMode.full &&
+                      !platformReduced,
+                  // Locked off, not hidden, when the device asks for reduced
+                  // motion — the customer can see why it is off.
+                  onChanged: platformReduced
+                      ? null
+                      : (value) => notifier.setMotionMode(
+                          value
+                              ? NatureMotionMode.full
+                              : NatureMotionMode.reduced,
+                        ),
+                  secondary: const _NatureSettingIcon(Icons.air_rounded),
+                  title: const Text(
+                    'Nature Motion',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    platformReduced
+                        ? 'Turned off by your device’s reduce-motion setting'
+                        : 'Ripples, drifting drops and gentle transitions',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NatureSettingIcon extends StatelessWidget {
+  const _NatureSettingIcon(this.icon);
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: AppColors.light,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Icon(icon, size: 20, color: AppColors.dark),
     );
   }
 }

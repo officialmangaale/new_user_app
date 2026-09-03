@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/nature/widgets/order_success_ripple.dart';
 import '../../../shared/models/app_models.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'puzzle_game.dart';
@@ -39,10 +40,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   Timer? _pollTimer;
   Timer? _alertTimer;
 
-  OrderTrackingRequest get _request => OrderTrackingRequest(
-        orderId: widget.orderId,
-        mode: widget.mode,
-      );
+  OrderTrackingRequest get _request =>
+      OrderTrackingRequest(orderId: widget.orderId, mode: widget.mode);
 
   @override
   void initState() {
@@ -124,141 +123,148 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     final deliveryNote = statusMessage.isNotEmpty
         ? statusMessage
         : riderName.isNotEmpty
-            ? '$riderName is handling your delivery'
-            : 'Live tracking updates will appear here';
+        ? '$riderName is handling your delivery'
+        : 'Live tracking updates will appear here';
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: Text('Order #${widget.orderId}'),
-            actions: [
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.help_outline_rounded),
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 330,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: _MapPlaceholder(riderLabel: riderLabel),
-                  ),
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    top: 14,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: _importantAlert
-                          ? Container(
-                              key: const ValueKey('alert'),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.navy,
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_active_rounded,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Text(
-                                      '${_statuses[_statusIndex]} • Your order status just changed',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w800,
+      // Wraps rather than replaces the body: the order number, status timeline
+      // and every action below are built and painted exactly as before, and the
+      // celebration is a pointer-transparent layer over the top that only plays
+      // when this screen was reached straight from a confirmed checkout.
+      body: OrderSuccessCelebration(
+        orderId: widget.orderId,
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              title: Text('Order #${widget.orderId}'),
+              actions: [
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.help_outline_rounded),
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 330,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _MapPlaceholder(riderLabel: riderLabel),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: 14,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: _importantAlert
+                            ? Container(
+                                key: const ValueKey('alert'),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.navy,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.notifications_active_rounded,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 9),
+                                    Expanded(
+                                      child: Text(
+                                        '${_statuses[_statusIndex]} • Your order status just changed',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                        ),
                                       ),
                                     ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox.shrink(key: ValueKey('no-alert')),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 14,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x26000000),
+                              blurRadius: 18,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _statuses[_statusIndex],
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
                                   ),
+                                  const SizedBox(height: 3),
+                                  Text(deliveryNote),
                                 ],
                               ),
-                            )
-                          : const SizedBox.shrink(key: ValueKey('no-alert')),
-                    ),
-                  ),
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 14,
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x26000000),
-                            blurRadius: 18,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  _statuses[_statusIndex],
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
+                                  eta,
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(color: AppColors.dark),
                                 ),
-                                const SizedBox(height: 3),
-                                Text(deliveryNote),
                               ],
                             ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                eta,
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(color: AppColors.dark),
-                              ),
-                            ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              sliver: SliverList.list(
+                children: [
+                  RiderInformationCard(
+                    name: riderLabel,
+                    phone: riderPhone,
+                    onCall: riderPhone.isEmpty
+                        ? null
+                        : () => _toast('Calling $riderLabel…'),
+                    onChat: () => _toast('Rider chat preview opened'),
+                    onSafety: () => _safetySheet(context),
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  _StatusTimeline(
+                    statuses: _statuses,
+                    currentIndex: _statusIndex,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  WaitingPuzzleGame(pausedForOrderAlert: _importantAlert),
                 ],
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            sliver: SliverList.list(
-              children: [
-                RiderInformationCard(
-                  name: riderLabel,
-                  phone: riderPhone,
-                  onCall: riderPhone.isEmpty
-                      ? null
-                      : () => _toast('Calling $riderLabel…'),
-                  onChat: () => _toast('Rider chat preview opened'),
-                  onSafety: () => _safetySheet(context),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _StatusTimeline(
-                  statuses: _statuses,
-                  currentIndex: _statusIndex,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                WaitingPuzzleGame(pausedForOrderAlert: _importantAlert),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -541,9 +547,7 @@ class RiderInformationCard extends StatelessWidget {
                           ),
                           Expanded(
                             child: Text(
-                              phone.isEmpty
-                                  ? 'Assigned by restaurant'
-                                  : phone,
+                              phone.isEmpty ? 'Assigned by restaurant' : phone,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
