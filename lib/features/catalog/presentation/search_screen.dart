@@ -1,3 +1,4 @@
+import '../../cart/presentation/floating_cart.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/cart_drop/add_to_cart_drop_animation.dart';
+import '../../cart/presentation/product_cart_animation.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
@@ -59,6 +60,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final grocery =
         ref.watch(appControllerProvider).mode == DeliveryMode.grocery;
     return Scaffold(
+      bottomNavigationBar: const CartDock(),
       appBar: AppBar(
         title: TextField(
           controller: _controller,

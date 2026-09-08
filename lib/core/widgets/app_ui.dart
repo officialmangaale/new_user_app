@@ -5,9 +5,6 @@ import 'package:flutter/services.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../shared/models/app_models.dart';
-import '../nature/nature_tokens.dart';
-import '../nature/widgets/leaf_add_button.dart';
-import '../nature/widgets/nature_button.dart';
 
 class AppNetworkImage extends StatelessWidget {
   const AppNetworkImage({
@@ -29,6 +26,25 @@ class AppNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (url.trim().isEmpty) {
+      return Semantics(
+        image: true,
+        label: semanticLabel,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.primaryVeryLight,
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.image_not_supported_outlined,
+            color: AppColors.textMuted,
+          ),
+        ),
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: Semantics(
@@ -408,9 +424,8 @@ class QuantityControl extends StatelessWidget {
   final VoidCallback onRemove;
   final bool compact;
 
-  /// Attached to the leaf ADD button so the add-to-cart animation knows where
-  /// the leaf is and can land the product on it. Null everywhere the animation
-  /// is not wanted, which simply means the drop starts from the pot instead.
+  /// Attached around the ADD/quantity control so its origin remains available
+  /// after ADD switches to the +/- stepper. The product image supplies the animation origin.
   final GlobalKey? addButtonKey;
 
   @override
@@ -419,23 +434,16 @@ class QuantityControl extends StatelessWidget {
         ? SizedBox(
             key: const ValueKey('add'),
             height: compact ? 38 : 44,
-            // The ADD button is the app's signature interaction, so it gets the
-            // water treatment: a ripple from the touch point and a small
-            // compression. Its silhouette is a leaf — the surface that receives
-            // the product before the product becomes water.
-            //
-            // The haptic is deliberately NOT fired here. For this button it
-            // belongs to the moment the cart actually changes, which only
-            // `addItemToCart` knows about — firing on tap would buzz for adds
-            // that are refused. The previous `HapticFeedback.selectionClick()`
-            // on this branch has moved there rather than being duplicated.
-            child: NatureButton(
-              key: addButtonKey,
-              onTap: onAdd,
-              haptic: NatureHaptic.none,
-              borderRadius: NatureMetrics.leafRadius(compact ? 38 : 44),
-              builder: (context, handleTap) =>
-                  LeafAddButton(onPressed: handleTap, compact: compact),
+            child: FilledButton(
+              onPressed: onAdd,
+              style: FilledButton.styleFrom(
+                enableFeedback: false,
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+              child: const Text('Add'),
             ),
           )
         : Container(
@@ -472,13 +480,18 @@ class QuantityControl extends StatelessWidget {
               ],
             ),
           );
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: ScaleTransition(scale: animation, child: child),
+    return RepaintBoundary(
+      key: addButtonKey,
+      child: AnimatedSwitcher(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: animation, child: child),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -497,6 +510,7 @@ class _QuantityButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
+      enableFeedback: false,
       constraints: BoxConstraints.tightFor(
         width: compact ? 34 : 40,
         height: compact ? 38 : 44,

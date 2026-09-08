@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/widgets/leaf_accent.dart';
+
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/premium_components.dart';
@@ -17,6 +17,7 @@ import '../../app_state/providers/app_controller.dart';
 import '../../catalog/presentation/add_to_cart.dart';
 import '../../catalog/providers/catalog_providers.dart';
 import '../../cart/providers/cart_controller.dart';
+import '../../cart/presentation/product_cart_animation.dart';
 import '../../orders/presentation/orders_screen.dart';
 import '../../orders/providers/orders_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
@@ -37,7 +38,7 @@ class HomeShellScreen extends ConsumerWidget {
     ];
 
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       body: IndexedStack(index: state.activeHomeTab, children: screens),
       bottomNavigationBar: SafeArea(
         top: false,
@@ -46,7 +47,7 @@ class HomeShellScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
+              duration: Duration.zero,
               transitionBuilder: (child, animation) => SizeTransition(
                 sizeFactor: animation,
                 alignment: Alignment.bottomCenter,
@@ -69,8 +70,14 @@ class HomeShellScreen extends ConsumerWidget {
               mode: state.mode,
               index: state.activeHomeTab,
               hasActiveGroup: state.joinedGroupIds.isNotEmpty,
-              onChanged: ref.read(appControllerProvider.notifier).setHomeTab,
-              onModeToggle: ref.read(appControllerProvider.notifier).toggleMode,
+              onChanged: (tab) {
+                ref.read(productCartAnimationProvider).clear();
+                ref.read(appControllerProvider.notifier).setHomeTab(tab);
+              },
+              onModeToggle: () {
+                ref.read(productCartAnimationProvider).clear();
+                ref.read(appControllerProvider.notifier).toggleMode();
+              },
             ),
           ],
         ),
@@ -129,10 +136,7 @@ class DeliveryHomeFeed extends ConsumerWidget {
     }
 
     return ColoredBox(
-      // Home's own ground, applied here rather than to the global theme so the
-      // pilot is contained: every other screen keeps AppColors.background until
-      // this treatment is reviewed.
-      color: NatureColors.offWhite,
+      color: AppColors.background,
       child: SafeArea(
         bottom: false,
         child: AnimatedSwitcher(
@@ -986,12 +990,9 @@ class _HomeSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // A small leaf beside the heading. Decoration only: it sits before the
-        // text rather than over it, is excluded from semantics, and ignores
-        // pointers, so the heading reads and behaves exactly as it did.
         const Padding(
           padding: EdgeInsets.only(right: 7, bottom: 2),
-          child: LeafAccent(size: 15),
+          child: Icon(Icons.local_dining, size: 15),
         ),
         Expanded(
           child: Text(

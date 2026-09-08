@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/services/api_exception.dart';
-import '../../../core/nature/widgets/nature_refresh_indicator.dart';
+
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/repositories/account_repository.dart';
@@ -44,7 +44,7 @@ class AddressesScreen extends ConsumerWidget {
           message:
               'Add an address so checkout knows where to deliver your order.',
         ),
-        builder: (items) => NatureRefreshIndicator(
+        builder: (items) => RefreshIndicator(
           onRefresh: () async => ref.invalidate(addressesProvider),
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(
