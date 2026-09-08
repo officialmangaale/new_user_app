@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/widgets/nature_refresh_indicator.dart';
+
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
@@ -95,7 +95,7 @@ class _OrdersList extends ConsumerWidget {
         final filtered = all
             .where((order) => order.status == status)
             .toList(growable: false);
-        return NatureRefreshIndicator(
+        return RefreshIndicator(
           onRefresh: () async => ref.invalidate(ordersProvider),
           child: ListView.separated(
             padding: EdgeInsets.fromLTRB(

@@ -1,17 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:turquoise_delivery/features/cart/providers/cart_controller.dart';
 import 'package:turquoise_delivery/features/catalog/presentation/add_to_cart.dart';
+import 'package:turquoise_delivery/features/catalog/providers/catalog_providers.dart';
 import 'package:turquoise_delivery/shared/models/app_models.dart';
 
-/// The single most important guarantee in the nature layer: the celebration is
-/// driven by whether the cart actually changed, never by the tap.
-///
-/// Every refusal path in [addItemToCart] must report a non-[AddToCartOutcome.added]
-/// result AND leave the cart count untouched, because the splash, the flying
-/// drop and the badge bounce all hang off that value.
+/// Cart outcomes remain independent of visual feedback.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,8 +57,12 @@ void main() {
                 container = ProviderScope.containerOf(context);
                 return TextButton(
                   onPressed: () async {
-                    outcome = await addItemToCart(context, ref, product,
-                        forceCustomise: forceCustomise);
+                    outcome = await addItemToCart(
+                      context,
+                      ref,
+                      product,
+                      forceCustomise: forceCustomise,
+                    );
                   },
                   child: const Text('go'),
                 );
@@ -87,16 +89,13 @@ void main() {
   });
 
   testWidgets('an unavailable item never reports added', (tester) async {
-    final (outcome, container) = await run(
-      tester,
-      item(isAvailable: false),
-    );
+    final (outcome, container) = await run(tester, item(isAvailable: false));
 
     expect(outcome, AddToCartOutcome.unavailable);
     expect(
       outcome.didMutateCart,
       isFalse,
-      reason: 'an unavailable item must not produce a splash or a flight',
+      reason: 'an unavailable item must not produce a success animation',
     );
     expect(
       container.read(cartCountProvider),
@@ -113,6 +112,102 @@ void main() {
       find.text('Alphonso Mangoes is unavailable right now.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('slow option hydration does not add or celebrate early', (
+    tester,
+  ) async {
+    final hydration = Completer<CatalogItem>();
+    late ProviderContainer container;
+    Future<AddToCartOutcome>? pending;
+    final product = item(
+      id: 'slow-food',
+      type: CatalogItemType.food,
+      hasVariants: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          itemDetailProvider.overrideWith((ref, id) => hydration.future),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                container = ProviderScope.containerOf(context);
+                return TextButton(
+                  onPressed: () =>
+                      pending = addItemToCart(context, ref, product),
+                  child: const Text('go'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final firstRequest = pending;
+    await tester.tap(find.text('go'));
+    expect(
+      await pending,
+      AddToCartOutcome.cancelled,
+      reason: 'rapid taps must not open duplicate option flows',
+    );
+
+    expect(container.read(cartCountProvider), 0);
+
+    hydration.complete(item(id: 'slow-food', type: CatalogItemType.food));
+    await tester.pumpAndSettle();
+
+    expect(await firstRequest, AddToCartOutcome.added);
+    expect(container.read(cartCountProvider), 1);
+  });
+
+  testWidgets('failed option hydration never mutates the cart', (tester) async {
+    late ProviderContainer container;
+    Future<AddToCartOutcome>? pending;
+    final product = item(
+      id: 'failed-food',
+      type: CatalogItemType.food,
+      hasVariants: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: (_, _) => null,
+        overrides: [
+          itemDetailProvider.overrideWith(
+            (ref, id) => Future<CatalogItem>.error(Exception('offline')),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                container = ProviderScope.containerOf(context);
+                return TextButton(
+                  onPressed: () =>
+                      pending = addItemToCart(context, ref, product),
+                  child: const Text('go'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
+    expect(await pending, AddToCartOutcome.optionsUnavailable);
+    expect(container.read(cartCountProvider), 0);
+    expect(find.text('Could not load options for Alphonso Mangoes.'), findsOne);
   });
 
   testWidgets('a dismissed customise sheet reports cancelled', (tester) async {

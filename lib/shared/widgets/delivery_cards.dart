@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
-import '../../core/nature/cart_drop/add_to_cart_drop_animation.dart';
-import '../../core/nature/cart_drop/clay_pot.dart';
+import '../../features/cart/presentation/product_cart_animation.dart';
+import '../../features/cart/presentation/floating_cart.dart';
+
 import '../../core/widgets/app_ui.dart';
 import '../models/app_models.dart';
 
@@ -207,9 +209,9 @@ String _restaurantFooterMeta(Restaurant restaurant) {
 /// Signature for [ProductCard.onAdd].
 ///
 /// The card hands back the two places the animation needs: its own product
-/// image, which the drop carries, and its leaf ADD button, which the product
-/// lands on before becoming water. A caller that ignores the origin still adds
-/// to the cart exactly as before and simply gets no animation.
+/// image, whose texture the drop carries, and its stable ADD/quantity control.
+/// A caller that ignores the origin still adds to the cart exactly as before
+/// and simply gets the pot-only acknowledgement.
 typedef ProductAddCallback = void Function(ProductAddOrigin origin);
 
 class ProductCard extends StatefulWidget {
@@ -240,9 +242,7 @@ class _ProductCardState extends State<ProductCard> {
   /// this card rebuilds often — it watches the cart quantity.
   final GlobalKey _imageKey = GlobalKey();
 
-  /// The leaf the product lands on. Held in state alongside the image key for
-  /// the same reason: this card rebuilds on every cart change, and a GlobalKey
-  /// recreated per build would detach and reattach its element each frame.
+  /// Stable control key across cart rebuilds.
   final GlobalKey _addKey = GlobalKey();
 
   @override
@@ -692,7 +692,7 @@ class _SavingStat extends StatelessWidget {
   }
 }
 
-class CartSummaryBar extends StatelessWidget {
+class CartSummaryBar extends ConsumerWidget {
   const CartSummaryBar({
     required this.count,
     required this.store,
@@ -707,67 +707,8 @@ class CartSummaryBar extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-      padding: const EdgeInsets.fromLTRB(14, 9, 9, 9),
-      decoration: BoxDecoration(
-        color: AppColors.featureDark,
-        borderRadius: BorderRadius.circular(17),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 16,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // The clay pot stands exactly where the count square stood — same
-          // 38x38 slot, so nothing on this bar moves. It carries the same
-          // count and opens the same route; it is a visual wrapper around the
-          // existing control, not a new one. It is also the destination the
-          // falling water drops aim at.
-          ClayPotCart(count: count, onTap: onTap),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  store,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  '$count ${count == 1 ? 'item' : 'items'} • ₹$total',
-                  style: const TextStyle(
-                    color: Color(0xFFD2F4EF),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          FilledButton(
-            onPressed: onTap,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.dark,
-              minimumSize: const Size(100, 42),
-              padding: const EdgeInsets.symmetric(horizontal: 13),
-            ),
-            child: const Text('View cart'),
-          ),
-        ],
-      ),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    return const FloatingCartBar();
   }
 }
 

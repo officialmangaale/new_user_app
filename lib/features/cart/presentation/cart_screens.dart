@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/widgets/order_success_ripple.dart';
+
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
@@ -16,7 +16,9 @@ import '../providers/cart_controller.dart';
 import '../providers/checkout_view_model.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
-  const CartScreen({super.key});
+  const CartScreen({this.onClose, super.key});
+
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<CartScreen> createState() => _CartScreenState();
@@ -65,6 +67,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final payable = bill?.grandTotal ?? total;
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onClose == null
+            ? null
+            : IconButton(
+                tooltip: 'Close cart',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              ),
         title: Text(grocery ? 'Your grocery basket' : 'Your food cart'),
         actions: [
           TextButton(
@@ -170,7 +179,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
               ),
               Expanded(
                 child: AppButton(
-                  label: 'Proceed to checkout',
+                  label: widget.onClose == null
+                      ? 'Proceed to checkout'
+                      : 'Checkout',
                   onPressed: () {
                     final authenticated = ref
                         .read(appControllerProvider)
@@ -250,8 +261,9 @@ class _CartLineTile extends ConsumerWidget {
             QuantityControl(
               quantity: line.quantity,
               compact: true,
-              onAdd: () =>
-                  ref.read(cartControllerProvider.notifier).addItem(line.item),
+              onAdd: () => ref
+                  .read(cartControllerProvider.notifier)
+                  .addSelection(line.selection),
               onRemove: () => ref
                   .read(cartControllerProvider.notifier)
                   .removeItem(line.lineId),
@@ -479,12 +491,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       result.when(
         success: (placed) {
-          // Arms the celebration for the screen we are about to open. This is
-          // a flag, not a delay: navigation happens on the very next line, and
-          // the tracking screen paints the order before anything is layered
-          // over it. A failure never reaches here, so a failed order can never
-          // celebrate.
-          ref.read(orderCelebrationProvider.notifier).arm(placed.orderId);
           context.go(
             grocery
                 ? '/tracking/${placed.orderId}?mode=grocery'

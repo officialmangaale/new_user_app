@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/nature/widgets/order_success_ripple.dart';
+
 import '../../../shared/models/app_models.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'puzzle_game.dart';
@@ -126,12 +126,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
         ? '$riderName is handling your delivery'
         : 'Live tracking updates will appear here';
     return Scaffold(
-      // Wraps rather than replaces the body: the order number, status timeline
-      // and every action below are built and painted exactly as before, and the
-      // celebration is a pointer-transparent layer over the top that only plays
-      // when this screen was reached straight from a confirmed checkout.
-      body: OrderSuccessCelebration(
-        orderId: widget.orderId,
+      body: Padding(padding: EdgeInsets.zero,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(

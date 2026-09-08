@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/nature/cart_drop/add_to_cart_drop_animation.dart';
+import '../../../features/cart/presentation/product_cart_animation.dart';
 import '../../../shared/models/app_models.dart';
 import '../../cart/providers/cart_controller.dart';
 import '../providers/catalog_providers.dart';
@@ -11,8 +11,7 @@ import 'item_customize_sheet.dart';
 ///
 /// Exists so the presentation layer can tell a real cart mutation from a
 /// refusal. Only [added] means the cart changed; every other value is a path
-/// that deliberately did nothing, and must never produce a splash, a flying
-/// drop or a badge bounce.
+/// that deliberately did nothing, and must never produce a success animation.
 enum AddToCartOutcome {
   /// The cart was mutated.
   added,
@@ -31,6 +30,10 @@ enum AddToCartOutcome {
   bool get didMutateCart => this == AddToCartOutcome.added;
 }
 
+// Only option dialogs are guarded. Ordinary repeated adds remain synchronous
+// so every tap increments the existing cart exactly once.
+final _pendingOptionsProvider = Provider<Set<String>>((ref) => <String>{});
+
 /// Single entry point for adding an item to the cart.
 ///
 /// Items without options are added directly. Items with variants or addons open
@@ -45,20 +48,7 @@ enum AddToCartOutcome {
 /// `/customer-web/catalog/items/:id` before the sheet opens. Without this the
 /// item is added at its base price, which for a variant-priced dish is ₹0.
 ///
-/// ---------------------------------------------------------------------------
-/// Nature layer
-/// ---------------------------------------------------------------------------
-/// This function now reports which branch it took, and fires the water
-/// celebration itself. Doing it here rather than in a tap handler is the whole
-/// point: this is the only place that knows whether the cart actually changed,
-/// so a refusal or a dismissed sheet cannot produce a false success.
-///
-/// The cart mutation happens first and is never awaited on the animation — the
-/// celebration is triggered after the state change, and returns immediately.
-///
-/// [origin] is optional. It carries the product image the drop is made from and
-/// the leaf button it lands on. Callers that omit it still mutate the cart
-/// identically and simply get the pot's reaction without the journey.
+/// Visual feedback follows the completed local cart mutation.
 Future<AddToCartOutcome> addItemToCart(
   BuildContext context,
   WidgetRef ref,
@@ -68,6 +58,7 @@ Future<AddToCartOutcome> addItemToCart(
   ProductAddOrigin? origin,
 }) async {
   final controller = ref.read(cartControllerProvider.notifier);
+  final route = ModalRoute.of(context);
   final storeId = restaurantId ?? item.storeId;
 
   int currentQuantity() => ref
@@ -79,19 +70,18 @@ Future<AddToCartOutcome> addItemToCart(
   // again afterwards — how many units actually landed in the cart.
   final quantityBefore = currentQuantity();
 
-  /// Runs the water journey. Called only on paths that genuinely mutated the
-  /// cart, and only ever after the mutation, so the number of drops is measured
-  /// rather than assumed.
+  // Feedback never controls the cart mutation.
   void celebrate() {
     if (!context.mounted) return;
     final unitsAdded = currentQuantity() - quantityBefore;
     if (unitsAdded <= 0) return;
     ref
-        .read(cartDropControllerProvider)
+        .read(productCartAnimationProvider)
         .celebrateAdd(
           context: context,
           item: item,
           unitsAdded: unitsAdded,
+          cartCountAfter: ref.read(cartCountProvider),
           isIncrement: quantityBefore > 0,
           origin: origin,
         );
@@ -114,35 +104,45 @@ Future<AddToCartOutcome> addItemToCart(
     return AddToCartOutcome.added;
   }
 
-  var resolved = item;
-  if (item.needsOptionHydration && item.type == CatalogItemType.food) {
-    try {
-      resolved = await ref.read(itemDetailProvider(item.id).future);
-    } catch (_) {
+  final pending = ref.read(_pendingOptionsProvider);
+  final requestKey = '${item.type.name}:$storeId:${item.id}';
+  if (!pending.add(requestKey)) return AddToCartOutcome.cancelled;
+  try {
+    var resolved = item;
+    if (item.needsOptionHydration && item.type == CatalogItemType.food) {
+      try {
+        resolved = await ref.read(itemDetailProvider(item.id).future);
+      } catch (_) {
+        if (!context.mounted) return AddToCartOutcome.optionsUnavailable;
+        _notify(context, 'Could not load options for ${item.name}.');
+        return AddToCartOutcome.optionsUnavailable;
+      }
       if (!context.mounted) return AddToCartOutcome.optionsUnavailable;
-      _notify(context, 'Could not load options for ${item.name}.');
-      return AddToCartOutcome.optionsUnavailable;
+      if (route?.isCurrent == false) return AddToCartOutcome.cancelled;
+      if (!resolved.isAvailable) {
+        _notify(context, '${resolved.name} is unavailable right now.');
+        return AddToCartOutcome.unavailable;
+      }
+      // The detail endpoint may report no options after all; add it directly
+      // rather than showing an empty sheet.
+      if (resolved.variants.isEmpty && resolved.addons.isEmpty) {
+        controller.addItem(resolved, restaurantId: storeId);
+        celebrate();
+        return AddToCartOutcome.added;
+      }
     }
-    if (!context.mounted) return AddToCartOutcome.optionsUnavailable;
-    if (!resolved.isAvailable) {
-      _notify(context, '${resolved.name} is unavailable right now.');
-      return AddToCartOutcome.unavailable;
-    }
-    // The detail endpoint may report no options after all; add it directly
-    // rather than showing an empty sheet.
-    if (resolved.variants.isEmpty && resolved.addons.isEmpty) {
-      controller.addItem(resolved, restaurantId: storeId);
-      celebrate();
-      return AddToCartOutcome.added;
-    }
-  }
 
-  if (!context.mounted) return AddToCartOutcome.cancelled;
-  final selection = await showItemCustomizeSheet(context, resolved);
-  if (selection == null) return AddToCartOutcome.cancelled;
-  controller.addSelection(selection, restaurantId: storeId);
-  celebrate();
-  return AddToCartOutcome.added;
+    if (!context.mounted) return AddToCartOutcome.cancelled;
+    final selection = await showItemCustomizeSheet(context, resolved);
+    if (selection == null || !context.mounted) {
+      return AddToCartOutcome.cancelled;
+    }
+    controller.addSelection(selection, restaurantId: storeId);
+    celebrate();
+    return AddToCartOutcome.added;
+  } finally {
+    pending.remove(requestKey);
+  }
 }
 
 void _notify(BuildContext context, String message) {

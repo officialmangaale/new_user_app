@@ -1,3 +1,4 @@
+import '../../cart/presentation/floating_cart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,6 +32,7 @@ class CategoryItemsScreen extends ConsumerWidget {
         ? ref.watch(groceryCategoryItemsProvider(categoryKey))
         : ref.watch(categoryItemsProvider(categoryKey));
     return Scaffold(
+      bottomNavigationBar: const CartDock(),
       appBar: AppBar(title: Text(title.isEmpty ? 'Category' : title)),
       body: AsyncListView(
         value: items,
