@@ -135,12 +135,20 @@ class AuthRepository {
           message: 'Login failed: the server did not return a session token.',
         );
       }
-      return session;
-    } on DioException catch (error) {
-      throw ApiException.fromDioException(error);
-    }
-  }
-}
+	      return session;
+	    } on DioException catch (error) {
+	      throw ApiException.fromDioException(error);
+	    }
+	  }
+
+	  Future<void> deleteAccount() async {
+	    try {
+	      await _client.restaurant.delete<dynamic>('/customer-web/account');
+	    } on DioException catch (error) {
+	      throw ApiException.fromDioException(error);
+	    }
+	  }
+	}
 
 int _asInt(Object? value) {
   if (value is int) return value;

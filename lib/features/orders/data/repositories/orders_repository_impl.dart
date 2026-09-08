@@ -26,6 +26,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   // ------------------------------------------------------------------
 
   /// POST /customer-web/cart/validate — authoritative totals, taxes and fees.
+  @override
   Future<Result<BillSummary>> validateCart({
     required String restaurantId,
     required List<CartLine> lines,
@@ -44,6 +45,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// POST /customer-web/grocery/cart/validate — stock-aware grocery totals.
+  @override
   Future<Result<BillSummary>> validateGroceryCart({
     required String groceryMerchantId,
     required List<CartLine> lines,
@@ -69,6 +71,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// POST /customer-web/coupons/validate.
+  @override
   Future<Result<CouponResult>> validateCoupon({
     required String code,
     required String restaurantId,
@@ -107,6 +110,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   /// The key is generated per checkout attempt and **reused** across retries so
   /// a lost response can never create a second order, matching the guarantee
   /// the backend enforces via `orders_restaurant_client_order_id_uq`.
+  @override
   Future<Result<PlacedOrder>> placeOrder({
     required String restaurantId,
     required List<CartLine> lines,
@@ -166,6 +170,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// POST /customer-web/grocery/orders — COD grocery checkout.
+  @override
   Future<Result<PlacedOrder>> placeGroceryOrder({
     required String groceryMerchantId,
     required List<CartLine> lines,
@@ -231,6 +236,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   // ------------------------------------------------------------------
 
   /// GET /customer-web/orders — order history.
+  @override
   Future<Result<List<DeliveryOrder>>> fetchOrders({int page = 1, int limit = 20}) async {
     try {
       final raw = await _get(
@@ -246,6 +252,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// GET /customer-web/orders/active — orders still in progress.
+  @override
   Future<Result<List<DeliveryOrder>>> fetchActiveOrders() async {
     try {
       final raw = await _get('/customer-web/orders/active');
@@ -258,6 +265,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// GET /customer-web/orders/:id
+  @override
   Future<Result<DeliveryOrder>> fetchOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/orders/$orderId');
@@ -268,6 +276,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// GET /customer-web/orders/:id/track — live tracking projection.
+  @override
   Future<Result<OrderTracking>> trackOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/orders/$orderId/track');
@@ -308,6 +317,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   }
 
   /// GET /customer-web/grocery/orders/:id/track.
+  @override
   Future<Result<OrderTracking>> trackGroceryOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/grocery/orders/$orderId/track');

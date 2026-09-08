@@ -361,7 +361,9 @@ class SharedOrderDetailsScreen extends ConsumerWidget {
                   subtitle: 'First names only • personal details stay private',
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                const _ParticipantRow(names: ['Maya', 'Kabir', 'Nisha', 'You']),
+                _ParticipantRow(
+                  names: detail?.participants.map((p) => p.name).toList() ?? [],
+                ),
                 const SizedBox(height: AppSpacing.lg),
                 PremiumSurface(
                   color: AppColors.primaryVeryLight,
@@ -730,9 +732,9 @@ class _WaitingRoomScreenState extends ConsumerState<WaitingRoomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final group =
-        ref.watch(sharedGroupProvider(widget.groupId)).value?.group ??
-        _emptyGroup(widget.groupId);
+    final detail = ref.watch(sharedGroupProvider(widget.groupId)).value;
+    final group = detail?.group ?? _emptyGroup(widget.groupId);
+    final participants = detail?.participants ?? [];
     final grocery = group.mode == DeliveryMode.grocery;
     return Scaffold(
       appBar: AppBar(
@@ -779,36 +781,29 @@ class _WaitingRoomScreenState extends ConsumerState<WaitingRoomScreen> {
                 : 'The group is getting closer to the next saving',
           ),
           const SizedBox(height: AppSpacing.sm),
-          for (final participant in const [
-            ('Maya', '4 items', true),
-            ('Kabir', '2 items', true),
-            ('Nisha', 'Adding items…', false),
-            ('You', '3 items', true),
-          ])
+          for (final participant in participants)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 backgroundColor: AppColors.light,
                 child: Text(
-                  participant.$1[0],
+                  participant.name.isNotEmpty ? participant.name[0] : '?',
                   style: const TextStyle(
                     color: AppColors.dark,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
-              title: Text(participant.$1),
-              subtitle: Text(participant.$2),
-              trailing: participant.$3
-                  ? const Icon(
+              title: Text(participant.name),
+              subtitle: Text(participant.isHost ? 'Host' : 'Joined'),
+              trailing: participant.isHost
+                  ? const Icon(Icons.star_rounded, color: AppColors.primary)
+                  : const Icon(
                       Icons.check_circle_rounded,
                       color: AppColors.success,
-                    )
-                  : const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
             ),
+
           if (grocery) ...[
             const SizedBox(height: AppSpacing.md),
             Card(

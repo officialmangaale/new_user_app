@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/services/api_exception.dart';
-
+import '../../../core/nature/widgets/nature_refresh_indicator.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/repositories/account_repository.dart';
@@ -252,6 +253,16 @@ class _AddressEditorState extends ConsumerState<_AddressEditor> {
     final messenger = ScaffoldMessenger.of(context);
     final repository = ref.read(accountRepositoryProvider);
     final existing = widget.existing;
+    
+    UserLocation? loc;
+    if (existing == null) {
+      try {
+        loc = await const LocationService().current();
+      } catch (_) {
+        // Fall back to no coordinates if permission denied
+      }
+    }
+
     // Coordinates are preserved on edit; the delivery lat/lng the order is
     // placed with comes from the device when available.
     final payload = CustomerAddress(
@@ -262,8 +273,8 @@ class _AddressEditorState extends ConsumerState<_AddressEditor> {
       city: _city.text.trim(),
       pincode: _pincode.text.trim(),
       isDefault: _isDefault,
-      latitude: existing?.latitude,
-      longitude: existing?.longitude,
+      latitude: existing?.latitude ?? loc?.latitude,
+      longitude: existing?.longitude ?? loc?.longitude,
     );
     try {
       if (existing == null) {

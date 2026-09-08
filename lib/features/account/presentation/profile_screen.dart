@@ -10,8 +10,10 @@ import '../../../core/widgets/app_ui.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../authentication/presentation/auth_screens.dart';
+import '../../authentication/providers/auth_providers.dart';
 import '../../notifications/providers/device_token_providers.dart';
 import '../../orders/providers/orders_providers.dart';
+import '../providers/content_provider.dart';
 import '../providers/engagement_providers.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -108,12 +110,12 @@ class ProfileScreen extends ConsumerWidget {
             _MenuEntry(
               Icons.favorite_border_rounded,
               'Favourite Restaurants',
-              route: '/info/Favourite Restaurants',
+              route: '/favorites/restaurants',
             ),
             _MenuEntry(
               Icons.bookmark_border_rounded,
               'Saved Grocery Items',
-              route: '/info/Saved Grocery Items',
+              route: '/favorites/grocery',
             ),
             _MenuEntry(
               Icons.notifications_none_rounded,
@@ -232,6 +234,15 @@ class ProfileScreen extends ConsumerWidget {
               style: TextStyle(color: AppColors.error),
             ),
           ),
+        if (authenticated)
+          TextButton.icon(
+            onPressed: () => _showDeleteAccountDialog(context, ref),
+            icon: const Icon(Icons.delete_forever_rounded, color: AppColors.error),
+            label: const Text(
+              'Delete Account',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
         const SizedBox(height: AppSpacing.md),
         Center(
           child: Text(
@@ -243,6 +254,43 @@ class ProfileScreen extends ConsumerWidget {
     );
     if (embedded) return SafeArea(bottom: false, child: content);
     return Scaffold(body: SafeArea(child: content));
+  }
+
+  Future<void> _showDeleteAccountDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+          'Your account will be scheduled for deletion and permanently removed in 7 days. This action cannot be undone. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ref.read(authRepositoryProvider).deleteAccount();
+        await ref.read(deviceTokenRegistrarProvider).unregister();
+        await ref.read(appControllerProvider.notifier).logout();
+        if (context.mounted) context.go('/welcome');
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete account: $e')),
+          );
+        }
+      }
+    }
   }
 }
 
@@ -609,83 +657,128 @@ class _MenuSection extends StatelessWidget {
   }
 }
 
-class InformationScreen extends StatelessWidget {
+class InformationScreen extends ConsumerWidget {
   const InformationScreen({required this.title, super.key});
 
   final String title;
 
   @override
-  Widget build(BuildContext context) {
-    final content = switch (title) {
-      'Help and Support' => (
-        'How can we help?',
-        'Browse common questions about orders, payments, shared groups and refunds. Our support team is available every day.',
-      ),
-      'Chat with Support' => (
-        'Start a conversation',
-        'Average response time is under 2 minutes. A support specialist will have access only to the order information you choose to share.',
-      ),
-      'Privacy Policy' => (
-        'Your privacy matters',
-        'We use only the information required to fulfil deliveries, secure payments and improve your experience. Shared-order participants never see private addresses.',
-      ),
-      'Terms and Conditions' => (
-        'Clear, fair terms',
-        'These demo terms explain eligibility, payments, group savings and account responsibilities. Production legal copy can be supplied through the content API.',
-      ),
-      'Refund and Cancellation Policy' => (
-        'Refunds and cancellations',
-        'Eligible refunds are returned to the original payment method. Cancelled or refunded orders do not earn referral rewards.',
-      ),
-      _ => (
-        title,
-        'This area is ready for its API-backed content. The complete navigation, states and production design system are already in place.',
-      ),
-    };
+  Widget build(BuildContext context, WidgetRef ref) {
+    final slug = title.toLowerCase().replaceAll(' ', '-');
+    final contentAsync = ref.watch(appContentProvider(slug));
+
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 70,
-              height: 70,
-              decoration: const BoxDecoration(
-                color: AppColors.light,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.auto_awesome_outlined,
-                color: AppColors.dark,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              content.$1,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 10),
-            Text(content.$2),
-            const SizedBox(height: 24),
-            if (title.contains('Support') || title.contains('Issue'))
-              AppButton(
-                label: title == 'Chat with Support'
-                    ? 'Start chat'
-                    : 'Contact support',
-                icon: Icons.chat_bubble_outline_rounded,
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Support conversation preview opened'),
-                  ),
+      body: contentAsync.when(
+        data: (content) => SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: const BoxDecoration(
+                  color: AppColors.light,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  size: 32,
+                  color: AppColors.primary,
                 ),
               ),
-          ],
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                content.title,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                content.body,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              if (title.contains('Support') || title.contains('Issue'))
+                AppButton(
+                  label: title == 'Chat with Support'
+                      ? 'Start chat'
+                      : 'Contact support',
+                  icon: Icons.chat_bubble_outline_rounded,
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Support conversation preview opened'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) {
+          final fallback = switch (title) {
+            'Help and Support' => (
+              'How can we help?',
+              'Browse common questions about orders, payments, shared groups and refunds. Our support team is available every day.',
+            ),
+            'Chat with Support' => (
+              'Start a conversation',
+              'Average response time is under 2 minutes. A support specialist will have access only to the order information you choose to share.',
+            ),
+            'Privacy Policy' => (
+              'Your privacy matters',
+              'We use only the information required to fulfil deliveries, secure payments and improve your experience. Shared-order participants never see private addresses.',
+            ),
+            'Terms and Conditions' => (
+              'Clear, fair terms',
+              'These demo terms explain eligibility, payments, group savings and account responsibilities. Production legal copy can be supplied through the content API.',
+            ),
+            'Refund and Cancellation Policy' => (
+              'Refunds and cancellations',
+              'Eligible refunds are returned to the original payment method. Cancelled or refunded orders do not earn referral rewards.',
+            ),
+            _ => (
+              title,
+              'This area is ready for its API-backed content. The complete navigation, states and production design system are already in place.',
+            ),
+          };
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: const BoxDecoration(
+                    color: AppColors.light,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    size: 32,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  fallback.$1,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  fallback.$2,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

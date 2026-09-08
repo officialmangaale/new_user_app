@@ -122,6 +122,7 @@ class AccountRepository {
     return listFrom(raw, keys: const ['notifications', 'items', 'results'])
         .map(
           (json) => AppNotificationItem(
+            id: readString(json, const ['id', 'notification_id']),
             title: readString(json, const ['title', 'heading']),
             body: readString(json, const ['body', 'message', 'description']),
             time: readString(json, const ['created_at', 'time', 'sent_at']),
@@ -148,7 +149,6 @@ class AccountRepository {
   }) async {
     await _send('POST', '/notifications/device-token', <String, dynamic>{
       'token': token,
-      'device_token': token,
       'platform': platform,
     });
   }
@@ -158,7 +158,6 @@ class AccountRepository {
   Future<void> removeDeviceToken(String token) async {
     await _send('DELETE', '/notifications/device-token', <String, dynamic>{
       'token': token,
-      'device_token': token,
     });
   }
 
@@ -190,6 +189,62 @@ class AccountRepository {
     } on DioException catch (error) {
       throw ApiException.fromDioException(error);
     }
+  }
+
+  Future<Map<String, dynamic>> _post(String path, Object? body) async {
+    try {
+      final response = await _client.restaurant.post<dynamic>(path, data: body);
+      return unwrapApiObject(response.data);
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // favorites and content
+  // ------------------------------------------------------------------
+
+  Future<AppContent> fetchAppContent(String slug) async {
+    final data = await _getObject('/customer-web/content/$slug');
+    return AppContent(
+      title: readString(data, const ['title']),
+      body: readString(data, const ['body']),
+    );
+  }
+
+  Future<List<FavoriteRestaurant>> fetchFavoriteRestaurants() async {
+    final raw = await _get('/customer-web/favorites/restaurants');
+    final list = listFrom(raw, keys: const ['restaurants']);
+    return list.map((json) => FavoriteRestaurant(
+      id: readString(json, const ['restaurant_id', 'id']),
+      name: readString(json, const ['name']),
+      imageUrl: readString(json, const ['image_url', 'image']),
+      tags: readString(json, const ['tags']),
+      rating: readDouble(json, const ['rating']),
+    )).toList();
+  }
+
+  Future<bool> toggleFavoriteRestaurant(String restaurantId) async {
+    final data = await _post('/customer-web/favorites/restaurants/$restaurantId', const {});
+    return readBool(data, const ['is_favorite']);
+  }
+
+  Future<List<FavoriteGroceryItem>> fetchFavoriteGroceryItems() async {
+    final raw = await _get('/customer-web/favorites/grocery');
+    final list = listFrom(raw, keys: const ['items']);
+    return list.map((json) => FavoriteGroceryItem(
+      productId: readString(json, const ['product_id', 'id']),
+      merchantId: readString(json, const ['merchant_id']),
+      name: readString(json, const ['name']),
+      imageUrl: readString(json, const ['image_url', 'image']),
+      sellingPrice: readDouble(json, const ['selling_price']),
+      packageSize: readString(json, const ['package_size']),
+    )).toList();
+  }
+
+  Future<bool> toggleFavoriteGroceryItem(String productId) async {
+    final data = await _post('/customer-web/favorites/grocery/$productId', const {});
+    return readBool(data, const ['is_favorite']);
   }
 }
 

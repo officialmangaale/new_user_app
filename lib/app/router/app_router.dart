@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/addresses_screen.dart';
+import '../../features/account/presentation/favorites_screens.dart';
 import '../../features/account/presentation/profile_screen.dart';
 import '../../features/account/presentation/wallet_referral_screens.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
@@ -120,6 +121,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => InformationScreen(
           title: Uri.decodeComponent(state.pathParameters['title']!),
         ),
+      ),
+      GoRoute(
+        path: '/favorites/restaurants',
+        builder: (_, _) => const FavoriteRestaurantsScreen(),
+      ),
+      GoRoute(
+        path: '/favorites/grocery',
+        builder: (_, _) => const FavoriteGroceryScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

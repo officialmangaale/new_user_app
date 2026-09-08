@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -319,10 +320,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 onPressed: (valid && !_sending) ? _sendOtp : null,
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                'By continuing, you agree to our Terms of Service and Privacy Policy.',
+              RichText(
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
+                text: TextSpan(
+                  style: Theme.of(context).textTheme.bodySmall,
+                  children: [
+                    const TextSpan(text: 'By continuing, you agree to our '),
+                    TextSpan(
+                      text: 'Terms & Conditions',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => context.push('/info/Terms%20and%20Conditions'),
+                    ),
+                    const TextSpan(text: ' and '),
+                    TextSpan(
+                      text: 'Privacy Policy',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()
+                        ..onTap = () => context.push('/info/Privacy%20Policy'),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
               ),
             ],
           ),

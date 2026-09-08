@@ -442,7 +442,7 @@ class ReferralScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
-          const ReferralSummaryCard(),
+          ReferralSummaryCard(summary: referral),
           const SizedBox(height: AppSpacing.lg),
           Container(
             padding: const EdgeInsets.all(18),
@@ -469,42 +469,6 @@ class ReferralScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Recent referral earnings',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          for (final person in const [
-            ('Riya S.', 'Today • Completed order', '+₹1'),
-            ('Ayaan K.', '11 Jul • Completed order', '+₹1'),
-            ('Meera P.', '9 Jul • Completed order', '+₹1'),
-          ])
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor: AppColors.light,
-                child: Text(
-                  person.$1[0],
-                  style: const TextStyle(
-                    color: AppColors.dark,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              title: Text(
-                person.$1,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text(person.$2),
-              trailing: Text(
-                person.$3,
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
           const SizedBox(height: AppSpacing.md),
           Text('How it works', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 10),
@@ -523,7 +487,9 @@ class ReferralScreen extends ConsumerWidget {
 }
 
 class ReferralSummaryCard extends StatelessWidget {
-  const ReferralSummaryCard({super.key});
+  const ReferralSummaryCard({required this.summary, super.key});
+  
+  final ReferralSummary summary;
 
   @override
   Widget build(BuildContext context) {
@@ -532,24 +498,24 @@ class ReferralSummaryCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 18),
         child: Column(
           children: [
-            const Row(
+            Row(
               children: [
                 Expanded(
-                  child: _ReferralStat(label: 'People referred', value: '142'),
+                  child: _ReferralStat(label: 'People referred', value: '${summary.totalReferrals}'),
                 ),
                 Expanded(
-                  child: _ReferralStat(label: 'Active users', value: '96'),
+                  child: _ReferralStat(label: 'Rewarded', value: '${summary.rewardedCount}'),
                 ),
               ],
             ),
             const Divider(height: 28),
-            const Row(
+            Row(
               children: [
                 Expanded(
-                  child: _ReferralStat(label: 'Total earnings', value: '₹386'),
+                  child: _ReferralStat(label: 'Total earnings', value: '₹${summary.totalEarned}'),
                 ),
                 Expanded(
-                  child: _ReferralStat(label: 'This month', value: '₹74'),
+                  child: _ReferralStat(label: 'Pending', value: '${summary.pendingCount}'),
                 ),
               ],
             ),

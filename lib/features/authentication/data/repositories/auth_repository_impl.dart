@@ -22,12 +22,20 @@ class AuthRepositoryImpl implements AuthRepositoryInterface {
   static const String _sendOtpPath = '/customers/auth/send-otp';
   static const String _verifyOtpPath = '/customers/auth/verify-otp';
 
+  String _normalizePhone(String phone) {
+    final cleaned = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.length == 10) return '+91$cleaned';
+    if (cleaned.length > 10 && cleaned.startsWith('91')) return '+$cleaned';
+    return phone;
+  }
+
   @override
   Future<Result<OtpSendResult>> sendOtp(String phone) async {
     try {
+      final normalizedPhone = _normalizePhone(phone);
       final response = await _client.user.post<dynamic>(
         _sendOtpPath,
-        data: <String, dynamic>{'phone': phone},
+        data: <String, dynamic>{'phone': normalizedPhone},
       );
       final dto = OtpSendResultDto.fromJson(unwrapApiObject(response.data));
       return Result.success(dto.toEntity());
@@ -46,9 +54,10 @@ class AuthRepositoryImpl implements AuthRepositoryInterface {
     required String otp,
   }) async {
     try {
+      final normalizedPhone = _normalizePhone(phone);
       final response = await _client.user.post<dynamic>(
         _verifyOtpPath,
-        data: <String, dynamic>{'phone': phone, 'otp': otp},
+        data: <String, dynamic>{'phone': normalizedPhone, 'otp': otp},
       );
       final dto = AuthSessionDto.fromJson(unwrapApiObject(response.data));
       if (dto.authToken.isEmpty) {

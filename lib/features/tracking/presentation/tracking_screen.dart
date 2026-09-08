@@ -5,9 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-
+import '../../../core/config/app_config.dart';
+import '../../../core/nature/widgets/order_success_ripple.dart';
 import '../../../shared/models/app_models.dart';
+import '../../authentication/providers/auth_providers.dart';
 import '../../orders/providers/orders_providers.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'puzzle_game.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -37,7 +40,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   int _statusIndex = 0;
   bool _importantAlert = false;
-  Timer? _pollTimer;
+  WebSocketChannel? _channel;
   Timer? _alertTimer;
 
   OrderTrackingRequest get _request =>
@@ -46,16 +49,30 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   @override
   void initState() {
     super.initState();
-    // Polling, not a socket: the app has no WebSocket dependency, and the
-    // backend order stream would need one. 15 s matches the KDS fallback.
-    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) ref.invalidate(orderTrackingProvider(_request));
-    });
+    _connectSocket();
+  }
+
+  Future<void> _connectSocket() async {
+    final token = await ref.read(authStorageProvider).readToken();
+    if (token == null || !mounted) return;
+    
+    final wsUrl = AppConfig.restaurantServiceWsBaseUrl.replaceFirst('http', 'ws');
+    final uri = Uri.parse('$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token');
+    
+    _channel = WebSocketChannel.connect(uri);
+    _channel?.stream.listen(
+      (_) {
+        if (mounted) ref.invalidate(orderTrackingProvider(_request));
+      },
+      onError: (_) {
+        if (mounted) ref.invalidate(orderTrackingProvider(_request));
+      },
+    );
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _channel?.sink.close();
     _alertTimer?.cancel();
     super.dispose();
   }
@@ -85,11 +102,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   };
 
   void _syncStatus(String status) {
-    // A delivered or cancelled order will never change again; polling it every
-    // 15 s for as long as the screen is open is pure waste.
+    // A delivered or cancelled order will never change again.
     if (_terminalStatuses.contains(status.toLowerCase())) {
-      _pollTimer?.cancel();
-      _pollTimer = null;
+      _channel?.sink.close();
+      _channel = null;
     }
     final next = _indexForStatus(status);
     if (next == _statusIndex) return;

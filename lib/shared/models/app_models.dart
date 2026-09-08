@@ -54,6 +54,7 @@ class WalletTransaction {
 
 class AppNotificationItem {
   const AppNotificationItem({
+    required this.id,
     required this.title,
     required this.body,
     required this.time,
@@ -61,10 +62,55 @@ class AppNotificationItem {
     this.unread = false,
   });
 
+  final String id;
   final String title;
   final String body;
   final String time;
   final String kind;
   final bool unread;
+}
+
+class FavoriteRestaurant {
+  const FavoriteRestaurant({
+    required this.id,
+    required this.name,
+    required this.imageUrl,
+    required this.tags,
+    required this.rating,
+  });
+
+  final String id;
+  final String name;
+  final String imageUrl;
+  final String tags;
+  final double rating;
+}
+
+class FavoriteGroceryItem {
+  const FavoriteGroceryItem({
+    required this.productId,
+    required this.merchantId,
+    required this.name,
+    required this.imageUrl,
+    required this.sellingPrice,
+    required this.packageSize,
+  });
+
+  final String productId;
+  final String merchantId;
+  final String name;
+  final String imageUrl;
+  final double sellingPrice;
+  final String packageSize;
+}
+
+class AppContent {
+  const AppContent({
+    required this.title,
+    required this.body,
+  });
+
+  final String title;
+  final String body;
 }
 
