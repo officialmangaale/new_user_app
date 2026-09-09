@@ -39,6 +39,7 @@ class ProfileScreen extends ConsumerWidget {
               .watch(referralSummaryProvider)
               .whenOrNull(data: (r) => '₹${r.totalEarned} earned')
         : null;
+    final profileAsync = authenticated ? ref.watch(profileProvider) : null;
     final content = ListView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.screenPadding,
@@ -51,9 +52,14 @@ class ProfileScreen extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         _ProfileHero(
           authenticated: authenticated,
-          profile: authenticated ? ref.watch(profileProvider).value : null,
+          profile: profileAsync?.value,
+          // `.value` is null both while loading and on failure, so without
+          // this the header sat on "Loading your details…" forever whenever
+          // /customer-web/profile failed.
+          failedToLoad: profileAsync?.hasError ?? false,
           onSignIn: () => context.push('/login?returnTo=/home'),
           onEdit: () => _editProfile(context, ref),
+          onRetry: () => ref.invalidate(profileProvider),
         ),
         const SizedBox(height: AppSpacing.md),
         if (authenticated) const _ProfileStats(),
@@ -358,16 +364,21 @@ class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
     required this.authenticated,
     required this.profile,
+    required this.failedToLoad,
     required this.onSignIn,
     required this.onEdit,
+    required this.onRetry,
   });
 
   final bool authenticated;
 
-  /// Null while `/customer-web/profile` is still loading, or when signed out.
+  /// Null while `/customer-web/profile` is still loading, when it failed, or
+  /// when signed out. [failedToLoad] separates the failure from the wait.
   final CustomerProfile? profile;
+  final bool failedToLoad;
   final VoidCallback onSignIn;
   final VoidCallback onEdit;
+  final VoidCallback onRetry;
 
   /// Masks the middle of the number the way the account header should, without
   /// inventing digits.
@@ -388,7 +399,10 @@ class _ProfileHero extends StatelessWidget {
     final phone = profile?.phone.trim() ?? '';
     if (phone.isNotEmpty) return _maskPhone(phone);
     final email = profile?.email.trim() ?? '';
-    return email.isNotEmpty ? email : 'Loading your details…';
+    if (email.isNotEmpty) return email;
+    return failedToLoad
+        ? 'Could not load your details. Tap to retry.'
+        : 'Loading your details…';
   }
 
   String get _initial {
@@ -431,11 +445,14 @@ class _ProfileHero extends StatelessWidget {
                   ).textTheme.titleLarge?.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  _subtitle,
-                  style: const TextStyle(
-                    color: Color(0xFFBCECE5),
-                    fontSize: 12,
+                InkWell(
+                  onTap: failedToLoad ? onRetry : null,
+                  child: Text(
+                    _subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFFBCECE5),
+                      fontSize: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 9),

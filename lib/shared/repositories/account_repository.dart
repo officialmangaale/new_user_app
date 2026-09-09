@@ -262,9 +262,16 @@ class CustomerProfile {
   final String email;
 
   factory CustomerProfile.fromJson(Map<String, dynamic> json) {
-    final user = json['user'];
-    final source = user is Map
-        ? <String, dynamic>{...json, ...Map<String, dynamic>.from(user)}
+    // restaurant-service nests the identity under `customer` on both
+    // GET and PATCH /customer-web/profile (see customer_web_extended.go —
+    // the object sits beside `culinary_profile` and `stats`). Other handlers
+    // use `user`, and some return the fields flat. Only `user` was handled
+    // before, so the real profile response parsed to empty strings on every
+    // field: the account screen showed "Your account / Loading your details…"
+    // forever, and checkout rejected the order for a missing name.
+    final nested = json['customer'] ?? json['user'] ?? json['profile'];
+    final source = nested is Map
+        ? <String, dynamic>{...json, ...Map<String, dynamic>.from(nested)}
         : json;
     return CustomerProfile(
       id: readString(source, const ['user_id', 'id', 'customer_id']),

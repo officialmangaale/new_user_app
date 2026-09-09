@@ -30,6 +30,9 @@ class OrderTracking {
     required this.etaMinutes,
     required this.riderName,
     required this.riderPhone,
+    this.riderLatitude,
+    this.riderLongitude,
+    this.riderMapsUrl = '',
   });
 
   final String orderId;
@@ -38,6 +41,21 @@ class OrderTracking {
   final int etaMinutes;
   final String riderName;
   final String riderPhone;
+
+  /// The rider's last known position. Null until a rider is assigned — the
+  /// backend only sends these once the order actually has one.
+  final double? riderLatitude;
+  final double? riderLongitude;
+
+  /// Google Maps deep link for [riderLatitude]/[riderLongitude], supplied by
+  /// the backend so the app never has to build the URL itself.
+  final String riderMapsUrl;
+
+  /// True when there is a real position to show on a map or hand to Maps.
+  bool get hasRiderLocation =>
+      riderLatitude != null &&
+      riderLongitude != null &&
+      !(riderLatitude == 0 && riderLongitude == 0);
 }
 
 class BillSummary {

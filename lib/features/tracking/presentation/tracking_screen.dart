@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/config/app_config.dart';
-import '../../../core/nature/widgets/order_success_ripple.dart';
+import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../authentication/providers/auth_providers.dart';
 import '../../orders/providers/orders_providers.dart';
@@ -264,6 +265,17 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                     onChat: () => _toast('Rider chat preview opened'),
                     onSafety: () => _safetySheet(context),
                   ),
+                  // Only offered once the backend reports a real rider
+                  // position — before assignment there is nothing to open.
+                  if (live != null && live.hasRiderLocation) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    AppButton(
+                      label: 'Open in Google Maps',
+                      icon: Icons.map_outlined,
+                      outlined: true,
+                      onPressed: () => _openRiderInMaps(live),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.md),
                   _StatusTimeline(
                     statuses: _statuses,
@@ -283,6 +295,24 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   void _toast(String message) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
+
+  /// Opens the rider's live position in Google Maps (or whatever handles the
+  /// link). Prefers the backend-supplied deep link so the URL format lives in
+  /// one place, and falls back to building it from the coordinates.
+  Future<void> _openRiderInMaps(OrderTracking live) async {
+    final url = live.riderMapsUrl.trim().isNotEmpty
+        ? live.riderMapsUrl.trim()
+        : 'https://www.google.com/maps/search/?api=1'
+              '&query=${live.riderLatitude},${live.riderLongitude}';
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      _toast('Could not open the rider location.');
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    // Never fail silently: if no app can handle the link, say so.
+    if (!opened && mounted) _toast('No maps app is available to open this.');
+  }
 
   void _safetySheet(BuildContext context) {
     showModalBottomSheet<void>(

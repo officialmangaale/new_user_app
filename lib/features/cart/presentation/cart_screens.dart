@@ -474,11 +474,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   /// Places the order via the ViewModel. Navigation only happens on a
   /// confirmed server response — a failure never shows success.
   Future<void> _placeOrder() async {
+    // Re-entrancy guard. `onPressed` is already nulled while `_paying` is true,
+    // but that only takes effect on the next rebuild — a fast double-tap can
+    // land twice before the frame renders. The idempotency key would make the
+    // second order a no-op server-side; this stops it leaving the device.
+    if (_paying) return;
+
+    final lines = ref.read(cartLinesProvider);
+    if (lines.isEmpty) {
+      // `lines.first` below would otherwise throw a bare StateError.
+      _showError('Your cart is empty.');
+      return;
+    }
+    final grocery = lines.first.item.type == CatalogItemType.grocery;
+
     setState(() => _paying = true);
     try {
-      final grocery =
-          ref.read(cartLinesProvider).first.item.type ==
-          CatalogItemType.grocery;
       final result = await ref
           .read(checkoutViewModelProvider.notifier)
           .placeOrder(
@@ -499,6 +510,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         },
         failure: (failure) => _showError(failure.message),
       );
+    } catch (error, stackTrace) {
+      // Nothing below the ViewModel is allowed to fail silently. Anything that
+      // is not a mapped Failure — a plugin error, a disposed provider, a parse
+      // bug — still has to reach the customer as a visible message, otherwise
+      // the button looks dead.
+      debugPrint('Checkout failed: $error');
+      debugPrintStack(stackTrace: stackTrace, label: 'Checkout');
+      _showError('Could not place your order. Please try again.');
     } finally {
       if (mounted) setState(() => _paying = false);
     }

@@ -11,10 +11,19 @@ import '../../app_state/providers/location_providers.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'cart_controller.dart';
 
+/// Deliberately **not** `autoDispose`.
+///
+/// Checkout is driven entirely through `ref.read(...notifier).placeOrder()` —
+/// no widget ever watches this provider, so an auto-disposing notifier has zero
+/// listeners and Riverpod tears it down at the first async gap. `placeOrder`
+/// awaits a GPS fix (up to 12 s), so every `ref` use and every `state =` after
+/// that gap threw `Cannot use the Ref … after it has been disposed`. The throw
+/// escaped to the zone and the tap appeared to do nothing at all.
+///
+/// The notifier holds no resources and `build()` is empty, so keeping it alive
+/// for the session costs nothing and removes the whole failure class.
 final checkoutViewModelProvider =
-    AsyncNotifierProvider.autoDispose<CheckoutViewModel, void>(
-      CheckoutViewModel.new,
-    );
+    AsyncNotifierProvider<CheckoutViewModel, void>(CheckoutViewModel.new);
 
 class CheckoutViewModel extends AsyncNotifier<void> {
   @override
@@ -60,7 +69,10 @@ class CheckoutViewModel extends AsyncNotifier<void> {
     final address = await _readDefaultAddress();
     final storedName = await ref.read(authStorageProvider).readUserName();
     final storedPhone = await ref.read(authStorageProvider).readUserPhone();
-    final customerName = (profile?.name ?? storedName ?? '').trim();
+    // `??` only falls back on null, but the profile endpoint returns empty
+    // strings for fields the customer has not filled in — so an unset name
+    // must fall through to the stored session value, not block checkout.
+    final customerName = _firstNonEmpty([profile?.name, storedName]);
     if (customerName.isEmpty) {
       final failure = const ValidationFailure(
         'Please update your name before placing an order.',
@@ -69,7 +81,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(failure);
     }
 
-    final customerPhone = (profile?.phone ?? storedPhone ?? '').trim();
+    final customerPhone = _firstNonEmpty([profile?.phone, storedPhone]);
     if (customerPhone.length < 10) {
       final failure = const ValidationFailure(
         'Please update your phone number before placing an order.',
@@ -160,7 +172,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
     }
 
     final storedPhone = await ref.read(authStorageProvider).readUserPhone();
-    final customerPhone = (profile?.phone ?? storedPhone ?? '').trim();
+    final customerPhone = _firstNonEmpty([profile?.phone, storedPhone]);
     if (customerPhone.length < 10) {
       final failure = const ValidationFailure(
         'Please update your phone number before placing a grocery order.',
@@ -177,7 +189,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       groceryMerchantId: merchantId,
       lines: lines,
       idempotencyKey: idempotencyKey,
-      customerName: profile?.name ?? '',
+      customerName: _firstNonEmpty([profile?.name]),
       customerPhone: customerPhone,
       deliveryAddress: deliveryAddress,
       deliveryLatitude: latitude,
@@ -199,6 +211,16 @@ class CheckoutViewModel extends AsyncNotifier<void> {
         return Result.failure(failure);
       },
     );
+  }
+
+  /// First value that is neither null nor blank, trimmed. Empty when there is
+  /// none — the caller decides whether that is fatal.
+  static String _firstNonEmpty(List<String?> candidates) {
+    for (final candidate in candidates) {
+      final text = candidate?.trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return '';
   }
 
   Future<CustomerProfile?> _readProfile() async {

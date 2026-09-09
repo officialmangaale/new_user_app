@@ -8,7 +8,9 @@ import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/engagement_repository.dart';
+import '../../../shared/repositories/referral_repository.dart';
 import '../providers/engagement_providers.dart';
+import '../providers/referral_providers.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -444,6 +446,10 @@ class ReferralScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.lg),
           ReferralSummaryCard(summary: referral),
           const SizedBox(height: AppSpacing.lg),
+          // Rewards the customer can actually spend, from the unified referral
+          // programme. Renders nothing when there are none, which is the
+          // normal state for most customers.
+          const _ActiveReferralRewards(),
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -564,4 +570,96 @@ class _Rule extends StatelessWidget {
       ],
     ),
   );
+}
+
+
+/// Referral rewards the customer can apply to an order right now.
+///
+/// Reads the unified referral programme (`/referrals/customer_referral/discounts`)
+/// alongside the older summary above. Deliberately silent when there is
+/// nothing to show: an empty rewards box on a screen most people open out of
+/// curiosity is noise, and a failure to load rewards must never break the
+/// Refer-and-Earn screen itself.
+class _ActiveReferralRewards extends ConsumerWidget {
+  const _ActiveReferralRewards();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final discounts = ref.watch(referralDiscountsProvider);
+
+    return discounts.maybeWhen(
+      data: (rewards) {
+        if (rewards.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your rewards',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ...rewards.map((reward) => _RewardTile(reward: reward)),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+        );
+      },
+      // Loading and error both render nothing: this is a supplementary
+      // section, and the screen is useful without it.
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _RewardTile extends StatelessWidget {
+  const _RewardTile({required this.reward});
+
+  final ReferralDiscount reward;
+
+  @override
+  Widget build(BuildContext context) {
+    final uses = reward.remainingUses;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.successLight,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.local_offer_rounded, color: AppColors.success),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  // Server-supplied wording, so the app can never describe the
+                  // offer differently from the admin panel.
+                  reward.summary.isNotEmpty
+                      ? reward.summary
+                      : 'Referral reward',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  uses == 1
+                      ? '1 use left'
+                      : '\$uses uses left of \${reward.totalUses}',
+                  style: const TextStyle(fontSize: 12, color: AppColors.dark),
+                ),
+                if (reward.maxDiscountMillis > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Up to ₹\${(reward.maxDiscountMillis / 1000).round()} per order',
+                    style: const TextStyle(fontSize: 11, color: AppColors.dark),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

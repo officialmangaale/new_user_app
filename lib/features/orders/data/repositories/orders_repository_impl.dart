@@ -310,10 +310,35 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         riderPhone: riderPhone.isNotEmpty
             ? riderPhone
             : readString(riderSource, const ['phone', 'rider_phone']),
+        // Present only once a rider is assigned; absent on older deployments
+        // that do not yet send them, hence the null-safe reads.
+        riderLatitude: _optionalDouble(riderSource, const [
+          'latitude',
+          'rider_latitude',
+        ]),
+        riderLongitude: _optionalDouble(riderSource, const [
+          'longitude',
+          'rider_longitude',
+        ]),
+        riderMapsUrl: readString(riderSource, const ['maps_url']),
       ));
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
+  }
+
+  /// Like [readDouble] but distinguishes "absent" from a genuine 0, so an
+  /// unassigned rider is not rendered at the equator.
+  static double? _optionalDouble(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is num) return value.toDouble();
+      if (value is String) {
+        final parsed = double.tryParse(value.trim());
+        if (parsed != null) return parsed;
+      }
+    }
+    return null;
   }
 
   /// GET /customer-web/grocery/orders/:id/track.

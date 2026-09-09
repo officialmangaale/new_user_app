@@ -45,6 +45,9 @@ dependencies:
   flutter_local_notifications: ^17.1.2
   audioplayers: ^6.8.1
   web_socket_channel: ^3.0.3
+  # Opens the rider's live position in Google Maps from order tracking.
+  # Same major version as rider-app and restaurant-owner.
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
