@@ -61,7 +61,12 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 // Data Providers (Unwrap Results)
 
 /// Order history. Requires a signed-in customer.
-final ordersProvider = FutureProvider<List<DeliveryOrder>>((ref) async {
+// The providers below are autoDispose because they hold data belonging to one
+// signed-in customer. Without it their value survives in the container after
+// logout, and the next person on a shared device sees the previous customer's
+// orders, name, phone, addresses or payment methods. This matches
+// favorites_provider.dart, which already scopes per-customer data this way.
+final ordersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((ref) async {
   final result = await ref.watch(fetchOrdersUseCaseProvider)();
   return result.when(
     success: (data) => data,
@@ -69,7 +74,7 @@ final ordersProvider = FutureProvider<List<DeliveryOrder>>((ref) async {
   );
 });
 
-final activeOrdersProvider = FutureProvider<List<DeliveryOrder>>((ref) async {
+final activeOrdersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((ref) async {
   final result = await ref.watch(fetchActiveOrdersUseCaseProvider)();
   return result.when(
     success: (data) => data,
@@ -114,15 +119,15 @@ final notificationsProvider = FutureProvider<List<AppNotificationItem>>((ref) {
   return ref.watch(accountRepositoryProvider).fetchNotifications();
 });
 
-final profileProvider = FutureProvider<CustomerProfile>((ref) {
+final profileProvider = FutureProvider.autoDispose<CustomerProfile>((ref) {
   return ref.watch(accountRepositoryProvider).fetchProfile();
 });
 
-final addressesProvider = FutureProvider<List<CustomerAddress>>((ref) {
+final addressesProvider = FutureProvider.autoDispose<List<CustomerAddress>>((ref) {
   return ref.watch(accountRepositoryProvider).fetchAddresses();
 });
 
-final paymentMethodsProvider = FutureProvider<List<PaymentMethod>>((ref) {
+final paymentMethodsProvider = FutureProvider.autoDispose<List<PaymentMethod>>((ref) {
   return ref.watch(accountRepositoryProvider).fetchPaymentMethods();
 });
 

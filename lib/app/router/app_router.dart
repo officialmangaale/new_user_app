@@ -6,7 +6,9 @@ import '../../features/account/presentation/addresses_screen.dart';
 import '../../features/account/presentation/favorites_screens.dart';
 import '../../features/account/presentation/profile_screen.dart';
 import '../../features/account/presentation/wallet_referral_screens.dart';
+import '../../features/app_state/providers/app_controller.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
+import '../../features/authentication/presentation/referral_capture_screen.dart';
 import '../../features/cart/presentation/cart_screens.dart';
 import '../../features/catalog/presentation/catalog_detail_screens.dart';
 import '../../features/catalog/presentation/category_items_screen.dart';
@@ -18,10 +20,37 @@ import '../../features/shared_orders/presentation/shared_order_screens.dart';
 import '../../features/tracking/presentation/tracking_screen.dart';
 import '../../shared/models/app_models.dart';
 import '../theme/app_colors.dart';
+import 'auth_redirect.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  // Re-runs the redirect whenever sign-in state changes, so logout takes
+  // effect immediately instead of at whatever the next navigation happens to
+  // be.
+  final sessionChanged = ValueNotifier<bool>(
+    ref.read(appControllerProvider).authenticated,
+  );
+  ref.listen<AppState>(appControllerProvider, (previous, next) {
+    if (previous?.authenticated != next.authenticated) {
+      sessionChanged.value = next.authenticated;
+    }
+  });
+  ref.onDispose(sessionChanged.dispose);
+
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: sessionChanged,
+    // The single place that decides whether a location is allowed for the
+    // current session. Before this, nothing re-checked auth on navigation, so
+    // popping back from the authenticated app could reveal the login or
+    // "Explore as guest" screen while the user was still signed in.
+    redirect: (context, state) {
+      final session = ref.read(appControllerProvider);
+      return authRedirect(
+        sessionLoaded: session.sessionLoaded,
+        authenticated: session.authenticated,
+        location: state.matchedLocation,
+      );
+    },
     routes: [
       GoRoute(path: '/', builder: (_, _) => const SplashScreen()),
       GoRoute(path: '/welcome', builder: (_, _) => const WelcomeScreen()),
@@ -110,6 +139,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/wallet', builder: (_, _) => const WalletScreen()),
       GoRoute(path: '/referral', builder: (_, _) => const ReferralScreen()),
+      // Referral deep links. Two shapes, because two transports deliver them:
+      // https://mangaale.com/r/<code> (App Link) and mangaale://referral/<code>
+      // (custom scheme). Both land before the visitor has an account, so they
+      // sit outside anything that requires a session.
+      GoRoute(
+        path: '/r/:code',
+        builder: (_, state) =>
+            ReferralCaptureScreen(code: state.pathParameters['code'] ?? ''),
+      ),
+      GoRoute(
+        path: '/referral/:code',
+        builder: (_, state) =>
+            ReferralCaptureScreen(code: state.pathParameters['code'] ?? ''),
+      ),
       GoRoute(
         path: '/notifications',
         builder: (_, _) => const NotificationsScreen(),

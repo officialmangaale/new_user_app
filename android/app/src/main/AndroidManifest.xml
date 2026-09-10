@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <application
-        android:label="Turquoise Delivery"
+        android:label="Mangaale"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -29,6 +29,39 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Referral links.
+                 Flutter's built-in deep linking hands the incoming URI to the
+                 app's router, which resolves /r/:code below. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="true" />
+
+            <!-- Custom scheme: works as soon as the app is installed, with no
+                 domain verification, so it is the reliable path today. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mangaale" android:host="referral" />
+            </intent-filter>
+
+            <!-- Android App Link for https://mangaale.com/r/<code>.
+                 autoVerify only succeeds once
+                 https://mangaale.com/.well-known/assetlinks.json lists this
+                 package with the signing certificate's SHA-256 fingerprint.
+                 Until that file is published, Android shows the usual
+                 app-or-browser chooser instead of opening directly; nothing
+                 breaks, the link simply falls back to the web page. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="mangaale.com"
+                    android:pathPrefix="/r/" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.turquoise" "\0"
-            VALUE "FileDescription", "Turquoise Delivery" "\0"
+            VALUE "FileDescription", "Mangaale" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "turquoise_delivery" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.turquoise. All rights reserved." "\0"
             VALUE "OriginalFilename", "turquoise_delivery.exe" "\0"
-            VALUE "ProductName", "Turquoise Delivery" "\0"
+            VALUE "ProductName", "Mangaale" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -31,7 +31,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
       await storage.clear();
       // Read lazily: this runs during a request, never during construction,
       // so it cannot create a provider cycle.
-      ref.read(appControllerProvider.notifier).handleSessionExpired();
+      await ref.read(appControllerProvider.notifier).handleSessionExpired();
     },
   );
 });

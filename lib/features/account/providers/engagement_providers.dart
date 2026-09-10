@@ -8,7 +8,7 @@ final engagementRepositoryProvider = Provider<EngagementRepository>((ref) {
   return EngagementRepository(ref.watch(apiClientProvider));
 });
 
-final walletProvider = FutureProvider<WalletStatement>((ref) {
+final walletProvider = FutureProvider.autoDispose<WalletStatement>((ref) {
   return ref.watch(engagementRepositoryProvider).fetchWallet();
 });
 

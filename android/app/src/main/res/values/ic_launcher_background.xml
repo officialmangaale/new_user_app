@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand teal sampled from assets/images/mangaale_app_icon.png (#05A096).
+     Used as the background layer of the adaptive launcher icon so the mark
+     sits on a full-bleed colour that the launcher can mask to any shape. -->
+<resources>
+    <color name="ic_launcher_background">#05A096</color>
+</resources>

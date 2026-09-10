@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/storage/guest_storage.dart';
+import '../../../core/storage/referral_storage.dart';
+import '../../account/providers/referral_providers.dart';
 import '../../../shared/models/app_models.dart';
+import 'session_scoped_providers.dart';
 
 class AppState {
   const AppState({
@@ -88,17 +91,52 @@ class AppController extends Notifier<AppState> {
     await _storage.setAuthenticated(true);
     await _storage.setOnboardingSeen();
     state = state.copyWith(authenticated: true, sessionLoaded: true);
+    await _applyPendingReferral();
+  }
+
+  /// Attributes a referral code captured from a link before this customer had
+  /// an account.
+  ///
+  /// Runs after the session exists, because the apply endpoint is
+  /// authenticated. Failures are deliberately swallowed: the customer has a
+  /// working account either way, and failing login over a referral would be
+  /// the wrong trade. The stored code is cleared whatever the outcome, so a
+  /// code the server refused is not retried on every sign-in.
+  Future<void> _applyPendingReferral() async {
+    final storage = ReferralStorage();
+    final code = await storage.readPendingCode();
+    if (code == null) return;
+    try {
+      await ref.read(referralRepositoryProvider).applyCode(code);
+    } catch (_) {
+      // Deliberately ignored — see above.
+    } finally {
+      await storage.clearPendingCode();
+    }
   }
 
   Future<void> logout() async {
     await _authStorage.clear();
     await _storage.setAuthenticated(false);
     state = state.copyWith(authenticated: false);
+    // Drop everything cached for the customer who just signed out, so the
+    // next person on this device cannot see their addresses, payment methods,
+    // order history or wallet.
+    invalidateSessionScopedProviders(ref);
   }
 
-  void handleSessionExpired() {
+  /// Called when the API rejects the stored token.
+  ///
+  /// The 401 handler in di_providers.dart clears the token before calling
+  /// this; clearing again here keeps the method safe on its own, so a future
+  /// caller cannot leave a dead token on disk for _hydrate to trust on the
+  /// next cold start.
+  Future<void> handleSessionExpired() async {
     if (!state.authenticated) return;
+    await _authStorage.clear();
+    await _storage.setAuthenticated(false);
     state = state.copyWith(authenticated: false);
+    invalidateSessionScopedProviders(ref);
   }
 
   void joinGroup(String id) {
