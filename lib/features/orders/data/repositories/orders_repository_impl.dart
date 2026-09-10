@@ -286,6 +286,13 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       final rider = data['rider'];
       final riderSource =
           rider is Map ? Map<String, dynamic>.from(rider) : <String, dynamic>{};
+      final restaurant = data['restaurant'];
+      final restaurantSource = restaurant is Map
+          ? Map<String, dynamic>.from(restaurant)
+          : <String, dynamic>{};
+      final address = data['delivery_address'];
+      final addressSource =
+          address is Map ? Map<String, dynamic>.from(address) : <String, dynamic>{};
       final riderName = readString(source, const [
         'rider_name',
         'delivery_partner',
@@ -321,6 +328,17 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           'rider_longitude',
         ]),
         riderMapsUrl: readString(riderSource, const ['maps_url']),
+        riderLocationUpdatedAt: DateTime.tryParse(
+          readString(riderSource, const ['location_updated_at']),
+        )?.toUtc(),
+        // Pickup and drop-off for the live map. Both are additive on the
+        // backend, so an older deployment simply leaves them null and the
+        // map shows what it has.
+        restaurantName: readString(restaurantSource, const ['name']),
+        restaurantLatitude: _optionalDouble(restaurantSource, const ['latitude']),
+        restaurantLongitude: _optionalDouble(restaurantSource, const ['longitude']),
+        deliveryLatitude: _optionalDouble(addressSource, const ['latitude']),
+        deliveryLongitude: _optionalDouble(addressSource, const ['longitude']),
       ));
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));

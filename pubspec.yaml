@@ -48,6 +48,7 @@ dependencies:
   # Opens the rider's live position in Google Maps from order tracking.
   # Same major version as rider-app and restaurant-owner.
   url_launcher: ^6.3.1
+  google_maps_flutter: ^2.18.0
 
 dev_dependencies:
   flutter_test:

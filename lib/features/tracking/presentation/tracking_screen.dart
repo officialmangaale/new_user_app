@@ -12,7 +12,9 @@ import '../../../shared/models/app_models.dart';
 import '../../authentication/providers/auth_providers.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'live_tracking_map.dart';
 import 'puzzle_game.dart';
+import '../domain/tracking_refresh_policy.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({
@@ -28,7 +30,8 @@ class TrackingScreen extends ConsumerStatefulWidget {
   ConsumerState<TrackingScreen> createState() => _TrackingScreenState();
 }
 
-class _TrackingScreenState extends ConsumerState<TrackingScreen> {
+class _TrackingScreenState extends ConsumerState<TrackingScreen>
+    with WidgetsBindingObserver {
   static const _statuses = [
     'Order confirmed',
     'Preparing',
@@ -44,13 +47,52 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   WebSocketChannel? _channel;
   Timer? _alertTimer;
 
+  /// Re-fetches the tracking snapshot on an interval. See
+  /// tracking_refresh_policy.dart for why this, not the socket, is what keeps
+  /// the rider's position current.
+  Timer? _pollTimer;
+  bool _appInForeground = true;
+  String _lastStatus = '';
+
   OrderTrackingRequest get _request =>
       OrderTrackingRequest(orderId: widget.orderId, mode: widget.mode);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _connectSocket();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(trackingPollInterval, (_) {
+      if (!mounted) return;
+      if (!shouldPollTracking(
+        status: _lastStatus,
+        appInForeground: _appInForeground,
+      )) {
+        return;
+      }
+      ref.invalidate(orderTrackingProvider(_request));
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appInForeground = state == AppLifecycleState.resumed;
+    if (_appInForeground && !isTerminalTrackingStatus(_lastStatus)) {
+      // Returning from the background, the position may be minutes old.
+      // Refresh now rather than waiting out the rest of the interval.
+      ref.invalidate(orderTrackingProvider(_request));
+      _startPolling();
+    }
   }
 
   Future<void> _connectSocket() async {
@@ -73,6 +115,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
     _channel?.sink.close();
     _alertTimer?.cancel();
     super.dispose();
@@ -91,22 +135,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     _ => 0,
   };
 
-  /// Statuses after which nothing more will change, so polling should stop.
-  static const _terminalStatuses = {
-    'delivered',
-    'completed',
-    'done',
-    'cancelled',
-    'canceled',
-    'rejected',
-    'declined',
-  };
-
   void _syncStatus(String status) {
-    // A delivered or cancelled order will never change again.
-    if (_terminalStatuses.contains(status.toLowerCase())) {
+    _lastStatus = status;
+    // A delivered or cancelled order will never change again: stop both the
+    // socket and the poll, so nothing keeps running for a finished order.
+    if (isTerminalTrackingStatus(status)) {
       _channel?.sink.close();
       _channel = null;
+      _stopPolling();
     }
     final next = _indexForStatus(status);
     if (next == _statusIndex) return;
@@ -162,7 +198,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: _MapPlaceholder(riderLabel: riderLabel),
+                      // The real map only when this build has a Maps key
+                      // (GOOGLE_MAPS_ENABLED) and there is at least one real
+                      // point to show. Otherwise the existing placeholder, so
+                      // a missing key or missing coordinates never produces a
+                      // blank or broken map.
+                      child: kGoogleMapsEnabled &&
+                              live != null &&
+                              (live.hasRiderLocation ||
+                                  live.hasRestaurantLocation ||
+                                  live.hasDeliveryLocation)
+                          ? LiveTrackingMap(tracking: live)
+                          : _MapPlaceholder(riderLabel: riderLabel),
                     ),
                     Positioned(
                       left: 16,

@@ -33,6 +33,12 @@ class OrderTracking {
     this.riderLatitude,
     this.riderLongitude,
     this.riderMapsUrl = '',
+    this.riderLocationUpdatedAt,
+    this.restaurantName = '',
+    this.restaurantLatitude,
+    this.restaurantLongitude,
+    this.deliveryLatitude,
+    this.deliveryLongitude,
   });
 
   final String orderId;
@@ -51,11 +57,55 @@ class OrderTracking {
   /// the backend so the app never has to build the URL itself.
   final String riderMapsUrl;
 
+  /// When the rider last reported a position. Null when unknown — an older
+  /// deployment, or no report yet.
+  final DateTime? riderLocationUpdatedAt;
+
+  /// Pickup point. Null when the restaurant has no stored coordinates.
+  final String restaurantName;
+  final double? restaurantLatitude;
+  final double? restaurantLongitude;
+
+  /// Drop-off point, from the order's delivery address.
+  final double? deliveryLatitude;
+  final double? deliveryLongitude;
+
+  /// A rider who has not reported for this long is shown as "updating" rather
+  /// than as a live position. Their app sends every 20 seconds on an active
+  /// delivery, so 90 seconds is several missed reports, not a single slow
+  /// one.
+  static const Duration staleAfter = Duration(seconds: 90);
+
   /// True when there is a real position to show on a map or hand to Maps.
-  bool get hasRiderLocation =>
-      riderLatitude != null &&
-      riderLongitude != null &&
-      !(riderLatitude == 0 && riderLongitude == 0);
+  bool get hasRiderLocation => isUsableCoordinate(riderLatitude, riderLongitude);
+
+  bool get hasRestaurantLocation =>
+      isUsableCoordinate(restaurantLatitude, restaurantLongitude);
+
+  bool get hasDeliveryLocation =>
+      isUsableCoordinate(deliveryLatitude, deliveryLongitude);
+
+  /// Whether the last known rider position is too old to present as live.
+  ///
+  /// A position with no timestamp is treated as stale: without knowing its
+  /// age, calling it live would be a guess.
+  bool isRiderLocationStaleAt(DateTime now) {
+    final updated = riderLocationUpdatedAt;
+    if (updated == null) return true;
+    return now.difference(updated) > staleAfter;
+  }
+}
+
+/// A coordinate pair worth putting on a map.
+///
+/// Rejects nulls, out-of-range values, and 0,0 — the value a missing position
+/// most often collapses to, which would drop a marker in the Gulf of Guinea.
+bool isUsableCoordinate(double? latitude, double? longitude) {
+  if (latitude == null || longitude == null) return false;
+  if (latitude.isNaN || longitude.isNaN) return false;
+  if (latitude < -90 || latitude > 90) return false;
+  if (longitude < -180 || longitude > 180) return false;
+  return !(latitude == 0 && longitude == 0);
 }
 
 class BillSummary {

@@ -9,6 +9,15 @@
         android:label="Mangaale"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Google Maps key for the live-tracking map. The value is a build
+             placeholder filled from android/local.properties or the
+             MAPS_API_KEY environment variable (see app/build.gradle.kts);
+             it is never committed. Restrict the key in Google Cloud Console
+             to this package name and its signing certificate. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${mapsApiKey}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
