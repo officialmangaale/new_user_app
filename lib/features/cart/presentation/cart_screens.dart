@@ -8,6 +8,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
+import '../../account/address/address_form_sheet.dart';
 import '../../orders/data/repositories/orders_repository_impl.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../orders/providers/orders_providers.dart';
@@ -329,7 +330,10 @@ class _AddressCard extends ConsumerWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => context.push('/addresses'),
+                  key: const Key('checkout-address-action'),
+                  onPressed: () => address == null
+                      ? _addAddressFromCheckout(context, ref)
+                      : context.push('/addresses'),
                   child: Text(address == null ? 'Add' : 'Change'),
                 ),
               ],
@@ -339,6 +343,28 @@ class _AddressCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Adds an address without leaving checkout. "Deliver my orders here" is on
+/// by default, so the saved address becomes the default, which is the address
+/// checkout places the order against.
+Future<void> _addAddressFromCheckout(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final saved = await showAddressFormSheet(context);
+  if (saved == null) return;
+  ref.invalidate(addressesProvider);
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        saved.isDefault
+            ? 'Delivering to ${saved.label.isEmpty ? 'this address' : saved.label}'
+            : 'Address saved',
+      ),
+    ),
+  );
 }
 
 CustomerAddress? _preferredAddress(List<CustomerAddress> addresses) {

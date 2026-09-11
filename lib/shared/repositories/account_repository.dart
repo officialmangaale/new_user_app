@@ -51,43 +51,84 @@ class AccountRepository {
   }
 
   // ------------------------------------------------------------------
-  // addresses
+  // addresses — user-service
   // ------------------------------------------------------------------
+  //
+  // These used to call restaurant-service `/customer-web/addresses`, which
+  // are stubs: GET always returns an empty list and every write answers 501
+  // "saved address storage is not configured". Saving an address could
+  // never succeed. user-service owns the real address book
+  // (`user_addresses`), and the web client already uses it.
 
-  /// GET /customer-web/addresses
+  static const _addressesPath = '/customers/me/addresses';
+
+  /// GET /customers/me/addresses
   Future<List<CustomerAddress>> fetchAddresses() async {
-    final raw = await _get('/customer-web/addresses');
-    return listFrom(raw, keys: const ['addresses', 'items'])
-        .map(CustomerAddress.fromJson)
-        .toList(growable: false);
-  }
-
-  /// POST /customer-web/addresses
-  Future<CustomerAddress> addAddress(CustomerAddress address) async {
     try {
-      final response = await _client.restaurant.post<dynamic>(
-        '/customer-web/addresses',
-        data: address.toJson(),
-      );
-      return CustomerAddress.fromJson(unwrapApiObject(response.data));
+      final response = await _client.user.get<dynamic>(_addressesPath);
+      return listFrom(
+        unwrapApiResponse(response.data),
+        keys: const ['addresses', 'items'],
+      ).map(CustomerAddress.fromJson).toList(growable: false);
     } on DioException catch (error) {
       throw ApiException.fromDioException(error);
     }
   }
 
-  /// PATCH /customer-web/addresses/:id
-  Future<void> updateAddress(String id, CustomerAddress address) async {
-    await _send('PATCH', '/customer-web/addresses/$id', address.toJson());
+  /// POST /customers/me/addresses — returns the saved address.
+  Future<CustomerAddress> addAddress(CustomerAddress address) async {
+    try {
+      final response = await _client.user.post<dynamic>(
+        _addressesPath,
+        data: address.toJson(),
+      );
+      return _addressFrom(response.data);
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
   }
 
-  /// DELETE /customer-web/addresses/:id
+  /// PATCH /customers/me/addresses/:id — returns the saved address.
+  Future<CustomerAddress> updateAddress(
+    String id,
+    CustomerAddress address,
+  ) async {
+    try {
+      final response = await _client.user.patch<dynamic>(
+        '$_addressesPath/$id',
+        data: address.toJson(),
+      );
+      return _addressFrom(response.data);
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  /// DELETE /customers/me/addresses/:id
   Future<void> deleteAddress(String id) async {
-    await _send('DELETE', '/customer-web/addresses/$id', null);
+    try {
+      await _client.user.delete<dynamic>('$_addressesPath/$id');
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
   }
 
-  /// PATCH /customer-web/addresses/:id/default
+  /// POST /customers/me/addresses/:id/default
   Future<void> setDefaultAddress(String id) async {
-    await _send('PATCH', '/customer-web/addresses/$id/default', null);
+    try {
+      await _client.user.post<dynamic>('$_addressesPath/$id/default');
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  /// user-service wraps the saved address as `{data: {address: {...}}}`.
+  static CustomerAddress _addressFrom(Object? raw) {
+    final data = unwrapApiObject(raw);
+    final nested = data['address'];
+    return CustomerAddress.fromJson(
+      nested is Map ? Map<String, dynamic>.from(nested) : data,
+    );
   }
 
   // ------------------------------------------------------------------
@@ -303,17 +344,34 @@ class CustomerAddress {
     required this.isDefault,
     this.latitude,
     this.longitude,
+    this.state = '',
+    this.landmark = '',
+    this.district = '',
+    this.locationAccuracyMeters,
   });
 
   final String id;
   final String label;
+
+  /// House / flat / floor and street / building, as one line.
   final String addressLine1;
   final String area;
   final String city;
   final String pincode;
   final bool isDefault;
+
+  /// The delivery pin, from device GPS when the customer chose "Use current
+  /// location". Null for an address typed without a pin.
   final double? latitude;
   final double? longitude;
+  final String state;
+  final String landmark;
+
+  /// From the pincode lookup; informational.
+  final String district;
+  final double? locationAccuracyMeters;
+
+  bool get hasPin => latitude != null && longitude != null;
 
   String get singleLine => [
     addressLine1,
@@ -323,6 +381,13 @@ class CustomerAddress {
   ].where((part) => part.isNotEmpty).join(', ');
 
   factory CustomerAddress.fromJson(Map<String, dynamic> json) {
+    double? number(String key) {
+      final value = json[key];
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
     return CustomerAddress(
       id: readString(json, const ['id', 'address_id']),
       label: readString(json, const ['label', 'tag', 'type']),
@@ -335,24 +400,32 @@ class CustomerAddress {
       city: readString(json, const ['city']),
       pincode: readString(json, const ['pincode', 'postal_code', 'zip']),
       isDefault: readBool(json, const ['is_default', 'default']),
-      latitude: json['latitude'] is num
-          ? (json['latitude'] as num).toDouble()
-          : null,
-      longitude: json['longitude'] is num
-          ? (json['longitude'] as num).toDouble()
-          : null,
+      latitude: number('latitude'),
+      longitude: number('longitude'),
+      state: readString(json, const ['state']),
+      landmark: readString(json, const ['landmark']),
+      district: readString(json, const ['district']),
+      locationAccuracyMeters: number('location_accuracy_meters'),
     );
   }
 
+  /// Body for POST/PATCH /customers/me/addresses. The pin is sent only as a
+  /// pair; older fields keep their names so the API stays compatible.
   Map<String, dynamic> toJson() => <String, dynamic>{
     'label': label,
     'address_line1': addressLine1,
     'area': area,
     'city': city,
+    'state': state,
     'pincode': pincode,
+    'landmark': landmark,
+    'district': district,
     'is_default': isDefault,
-    'latitude': ?latitude,
-    'longitude': ?longitude,
+    if (hasPin) ...{
+      'latitude': latitude,
+      'longitude': longitude,
+      'location_accuracy_meters': ?locationAccuracyMeters,
+    },
   };
 }
 

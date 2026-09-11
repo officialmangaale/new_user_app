@@ -3,21 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../core/services/api_exception.dart';
-import '../../../core/services/location_service.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../orders/providers/orders_providers.dart';
+import '../address/address_form_logic.dart';
+import '../address/address_form_sheet.dart';
 
-/// Saved delivery addresses, backed by the existing customer address CRUD on
-/// restaurant-service:
+/// Saved delivery addresses, backed by user-service:
 ///
-///   GET    /customer-web/addresses
-///   POST   /customer-web/addresses
-///   PATCH  /customer-web/addresses/:id
-///   DELETE /customer-web/addresses/:id
-///   PATCH  /customer-web/addresses/:id/default
+///   GET    /customers/me/addresses
+///   POST   /customers/me/addresses
+///   PATCH  /customers/me/addresses/:id
+///   DELETE /customers/me/addresses/:id
+///   POST   /customers/me/addresses/:id/default
 ///
 /// Checkout reads the default address (`CheckoutViewModel._readDefaultAddress`),
 /// so "Set as delivery address" here is what actually selects the address the
@@ -116,8 +115,7 @@ class _AddressTile extends ConsumerWidget {
                 IconButton(
                   tooltip: 'Edit',
                   icon: const Icon(Icons.edit_outlined),
-                  onPressed: () =>
-                      _openEditor(context, ref, existing: address),
+                  onPressed: () => _openEditor(context, ref, existing: address),
                 ),
                 IconButton(
                   tooltip: 'Delete',
@@ -180,172 +178,35 @@ Future<void> _run(
     await action();
     ref.invalidate(addressesProvider);
     messenger.showSnackBar(SnackBar(content: Text(successMessage)));
-  } on ApiException catch (error) {
-    messenger.showSnackBar(SnackBar(content: Text(error.message)));
+  } catch (error) {
+    // Any failure, not only API errors, is shown.
+    messenger.showSnackBar(
+      SnackBar(content: Text(describeSaveError(error).message)),
+    );
   }
 }
 
+/// Opens the address sheet and, after it closes with a saved address,
+/// refreshes the list and confirms. The confirmation is shown here, on the
+/// page, because a message raised from inside the sheet renders behind it.
 Future<void> _openEditor(
   BuildContext context,
   WidgetRef ref, {
   CustomerAddress? existing,
-}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final saved = await showAddressFormSheet(context, existing: existing);
+  if (saved == null) return;
+  ref.invalidate(addressesProvider);
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        existing == null
+            ? (saved.isDefault
+                  ? 'Address saved. Delivering here.'
+                  : 'Address saved')
+            : 'Address updated',
       ),
-      child: _AddressEditor(existing: existing),
     ),
   );
-}
-
-class _AddressEditor extends ConsumerStatefulWidget {
-  const _AddressEditor({this.existing});
-
-  final CustomerAddress? existing;
-
-  @override
-  ConsumerState<_AddressEditor> createState() => _AddressEditorState();
-}
-
-class _AddressEditorState extends ConsumerState<_AddressEditor> {
-  late final TextEditingController _label;
-  late final TextEditingController _line1;
-  late final TextEditingController _area;
-  late final TextEditingController _city;
-  late final TextEditingController _pincode;
-  late bool _isDefault;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final existing = widget.existing;
-    _label = TextEditingController(text: existing?.label ?? 'Home');
-    _line1 = TextEditingController(text: existing?.addressLine1 ?? '');
-    _area = TextEditingController(text: existing?.area ?? '');
-    _city = TextEditingController(text: existing?.city ?? '');
-    _pincode = TextEditingController(text: existing?.pincode ?? '');
-    _isDefault = existing?.isDefault ?? true;
-  }
-
-  @override
-  void dispose() {
-    for (final controller in [_label, _line1, _area, _city, _pincode]) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_line1.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the house / street details.')),
-      );
-      return;
-    }
-    setState(() => _saving = true);
-    final messenger = ScaffoldMessenger.of(context);
-    final repository = ref.read(accountRepositoryProvider);
-    final existing = widget.existing;
-    
-    UserLocation? loc;
-    if (existing == null) {
-      try {
-        loc = await const LocationService().current();
-      } catch (_) {
-        // Fall back to no coordinates if permission denied
-      }
-    }
-
-    // Coordinates are preserved on edit; the delivery lat/lng the order is
-    // placed with comes from the device when available.
-    final payload = CustomerAddress(
-      id: existing?.id ?? '',
-      label: _label.text.trim(),
-      addressLine1: _line1.text.trim(),
-      area: _area.text.trim(),
-      city: _city.text.trim(),
-      pincode: _pincode.text.trim(),
-      isDefault: _isDefault,
-      latitude: existing?.latitude ?? loc?.latitude,
-      longitude: existing?.longitude ?? loc?.longitude,
-    );
-    try {
-      if (existing == null) {
-        await repository.addAddress(payload);
-      } else {
-        await repository.updateAddress(existing.id, payload);
-      }
-      ref.invalidate(addressesProvider);
-      if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(existing == null ? 'Address saved' : 'Address updated'),
-        ),
-      );
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() => _saving = false);
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.existing == null ? 'Add address' : 'Edit address',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 14),
-          _field(_label, 'Label (Home, Work…)'),
-          _field(_line1, 'House / flat / street'),
-          _field(_area, 'Area / locality'),
-          _field(_city, 'City'),
-          _field(_pincode, 'Pincode', keyboard: TextInputType.number),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _isDefault,
-            onChanged: (value) => setState(() => _isDefault = value),
-            title: const Text('Deliver my orders here'),
-          ),
-          const SizedBox(height: 8),
-          AppButton(
-            label: widget.existing == null ? 'Save address' : 'Update address',
-            loading: _saving,
-            onPressed: _saving ? null : _save,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _field(
-    TextEditingController controller,
-    String label, {
-    TextInputType? keyboard,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboard,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
 }

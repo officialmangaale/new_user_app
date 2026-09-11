@@ -64,7 +64,6 @@ class CheckoutViewModel extends AsyncNotifier<void> {
 
     state = const AsyncValue.loading();
 
-    final location = await ref.read(currentLocationProvider.future);
     final profile = await _readProfile();
     final address = await _readDefaultAddress();
     final storedName = await ref.read(authStorageProvider).readUserName();
@@ -90,21 +89,12 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(failure);
     }
 
-    final hasSavedAddress =
-        address != null && address.addressLine1.trim().isNotEmpty;
-    if (!hasSavedAddress && location == null) {
-      final failure = const ValidationFailure(
-        'Save a delivery address or turn on location to place an order.',
-      );
-      state = AsyncValue.error(failure, StackTrace.current);
-      return Result.failure(failure);
+    final delivery = await _resolveDelivery(address);
+    if (delivery.failure != null) {
+      state = AsyncValue.error(delivery.failure!, StackTrace.current);
+      return Result.failure(delivery.failure!);
     }
-
-    final latitude = location?.latitude ?? address?.latitude ?? 0;
-    final longitude = location?.longitude ?? address?.longitude ?? 0;
-    final deliveryAddressLine1 = hasSavedAddress
-        ? address.addressLine1
-        : 'Current location';
+    final deliveryAddress = delivery.address!;
 
     final result = await ref.read(placeOrderUseCaseProvider)(
       restaurantId: cartState.cartRestaurantId,
@@ -112,13 +102,13 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       idempotencyKey: idempotencyKey,
       customerName: customerName,
       customerPhone: customerPhone,
-      deliveryAddressLine1: deliveryAddressLine1,
-      deliveryLatitude: latitude,
-      deliveryLongitude: longitude,
-      deliveryArea: address?.area,
-      deliveryCity: address?.city,
-      deliveryPincode: address?.pincode,
-      deliveryLandmark: address?.area,
+      deliveryAddressLine1: deliveryAddress.addressLine1,
+      deliveryLatitude: delivery.latitude!,
+      deliveryLongitude: delivery.longitude!,
+      deliveryArea: _nonEmpty(deliveryAddress.area),
+      deliveryCity: _nonEmpty(deliveryAddress.city),
+      deliveryPincode: _nonEmpty(deliveryAddress.pincode),
+      deliveryLandmark: _nonEmpty(deliveryAddress.landmark),
       paymentMethod: paymentMethod,
       instructions: instructions,
     );
@@ -158,18 +148,14 @@ class CheckoutViewModel extends AsyncNotifier<void> {
 
     state = const AsyncValue.loading();
 
-    final location = await ref.read(currentLocationProvider.future);
     final profile = await _readProfile();
     final address = await _readDefaultAddress();
-    final latitude = location?.latitude ?? address?.latitude;
-    final longitude = location?.longitude ?? address?.longitude;
-    if (latitude == null || longitude == null) {
-      final failure = const ValidationFailure(
-        'Turn on location or save an address with location to place a grocery order.',
-      );
-      state = AsyncValue.error(failure, StackTrace.current);
-      return Result.failure(failure);
+    final delivery = await _resolveDelivery(address);
+    if (delivery.failure != null) {
+      state = AsyncValue.error(delivery.failure!, StackTrace.current);
+      return Result.failure(delivery.failure!);
     }
+    final deliveryAddress = delivery.address!;
 
     final storedPhone = await ref.read(authStorageProvider).readUserPhone();
     final customerPhone = _firstNonEmpty([profile?.phone, storedPhone]);
@@ -181,20 +167,16 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(failure);
     }
 
-    final deliveryAddress = (address?.singleLine.trim().isNotEmpty ?? false)
-        ? address!.singleLine
-        : 'Current location';
-
     final result = await ref.read(placeGroceryOrderUseCaseProvider)(
       groceryMerchantId: merchantId,
       lines: lines,
       idempotencyKey: idempotencyKey,
       customerName: _firstNonEmpty([profile?.name]),
       customerPhone: customerPhone,
-      deliveryAddress: deliveryAddress,
-      deliveryLatitude: latitude,
-      deliveryLongitude: longitude,
-      deliveryLandmark: address?.area,
+      deliveryAddress: deliveryAddress.singleLine,
+      deliveryLatitude: delivery.latitude!,
+      deliveryLongitude: delivery.longitude!,
+      deliveryLandmark: _nonEmpty(deliveryAddress.landmark),
       paymentMethod: paymentMethod,
       instructions: instructions,
     );
@@ -211,6 +193,42 @@ class CheckoutViewModel extends AsyncNotifier<void> {
         return Result.failure(failure);
       },
     );
+  }
+
+  /// Where the order goes, or why it cannot be placed.
+  ///
+  /// A saved address is required: a "Current location" order carries no
+  /// house or flat number, so the rider cannot find the door.
+  ///
+  /// The address's own pin is used when it has one. The device location used
+  /// to take priority, so an order to "Home" placed from the office was
+  /// pinned at the office. The device location is now only a fallback for an
+  /// address saved without a pin, and GPS is not awaited when it is not
+  /// needed.
+  Future<_DeliveryTarget> _resolveDelivery(CustomerAddress? address) async {
+    if (address == null || address.addressLine1.trim().isEmpty) {
+      return const _DeliveryTarget.failed(
+        ValidationFailure('Add a delivery address to place your order.'),
+      );
+    }
+    if (address.hasPin) {
+      return _DeliveryTarget(address, address.latitude!, address.longitude!);
+    }
+    final location = await ref.read(currentLocationProvider.future);
+    if (location == null) {
+      return const _DeliveryTarget.failed(
+        ValidationFailure(
+          'Pin this address so your rider can find you: edit it and tap '
+          '"Use current location", or turn on location.',
+        ),
+      );
+    }
+    return _DeliveryTarget(address, location.latitude, location.longitude);
+  }
+
+  static String? _nonEmpty(String value) {
+    final text = value.trim();
+    return text.isEmpty ? null : text;
   }
 
   /// First value that is neither null nor blank, trimmed. Empty when there is
@@ -245,4 +263,22 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return null;
     }
   }
+}
+
+class _DeliveryTarget {
+  const _DeliveryTarget(
+    CustomerAddress this.address,
+    double this.latitude,
+    double this.longitude,
+  ) : failure = null;
+
+  const _DeliveryTarget.failed(ValidationFailure this.failure)
+    : address = null,
+      latitude = null,
+      longitude = null;
+
+  final CustomerAddress? address;
+  final double? latitude;
+  final double? longitude;
+  final ValidationFailure? failure;
 }
