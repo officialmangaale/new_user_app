@@ -14,6 +14,7 @@ import '../../orders/providers/orders_providers.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'live_tracking_map.dart';
 import 'puzzle_game.dart';
+import '../domain/rider_assignment_state.dart';
 import '../domain/tracking_refresh_policy.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -170,7 +171,15 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ? '${live.etaMinutes} min'
         : (_statusIndex >= 5 ? 'Arriving' : '—');
     final riderName = live?.riderName.trim() ?? '';
-    final riderLabel = riderName.isEmpty ? 'Delivery partner' : riderName;
+    // The single source of truth for what may be said about the rider. An
+    // empty name means none is assigned — the backend sends rider: null until
+    // one is — so nothing below may invent one.
+    final riderState = riderAssignmentState(
+      status: live?.status ?? '',
+      riderName: riderName,
+    );
+    final riderAssigned = riderState == RiderAssignmentState.assigned;
+    final riderLabel = riderAssigned ? riderName : riderSearchTitle(riderState);
     final riderPhone = live?.riderPhone.trim() ?? '';
     final statusMessage = live?.statusLabel.trim() ?? '';
     final deliveryNote = statusMessage.isNotEmpty
@@ -209,7 +218,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                                   live.hasRestaurantLocation ||
                                   live.hasDeliveryLocation)
                           ? LiveTrackingMap(tracking: live)
-                          : _MapPlaceholder(riderLabel: riderLabel),
+                          : _MapPlaceholder(
+                              riderLabel: riderLabel,
+                              showRider: riderAssigned,
+                            ),
                     ),
                     Positioned(
                       left: 16,
@@ -303,15 +315,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               sliver: SliverList.list(
                 children: [
-                  RiderInformationCard(
-                    name: riderLabel,
-                    phone: riderPhone,
-                    onCall: riderPhone.isEmpty
-                        ? null
-                        : () => _toast('Calling $riderLabel…'),
-                    onChat: () => _toast('Rider chat preview opened'),
-                    onSafety: () => _safetySheet(context),
-                  ),
+                  if (riderAssigned)
+                    RiderInformationCard(
+                      name: riderLabel,
+                      phone: riderPhone,
+                      onCall: riderPhone.isEmpty
+                          ? null
+                          : () => _toast('Calling $riderLabel…'),
+                      onChat: () => _toast('Rider chat preview opened'),
+                      onSafety: () => _safetySheet(context),
+                    )
+                  else if (riderState != RiderAssignmentState.none)
+                    // No rider yet: say so, and offer nothing that implies
+                    // one exists — no call, no chat, no rider on the map.
+                    _RiderSearchCard(state: riderState),
                   // Only offered once the backend reports a real rider
                   // position — before assignment there is nothing to open.
                   if (live != null && live.hasRiderLocation) ...[
@@ -419,9 +436,13 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
 }
 
 class _MapPlaceholder extends StatelessWidget {
-  const _MapPlaceholder({required this.riderLabel});
+  const _MapPlaceholder({required this.riderLabel, required this.showRider});
 
   final String riderLabel;
+
+  /// False until a rider is assigned, so the illustration never shows a
+  /// delivery partner on the way when there is none.
+  final bool showRider;
 
   @override
   Widget build(BuildContext context) {
@@ -439,15 +460,16 @@ class _MapPlaceholder extends StatelessWidget {
               color: AppColors.navy,
             ),
           ),
-          Positioned(
-            right: 94,
-            top: 138,
-            child: _MapMarker(
-              icon: Icons.delivery_dining_rounded,
-              label: riderLabel,
-              color: AppColors.primary,
+          if (showRider)
+            Positioned(
+              right: 94,
+              top: 138,
+              child: _MapMarker(
+                icon: Icons.delivery_dining_rounded,
+                label: riderLabel,
+                color: AppColors.primary,
+              ),
             ),
-          ),
           const Positioned(
             right: 27,
             bottom: 78,
@@ -583,6 +605,79 @@ class _MapMarker extends StatelessWidget {
   }
 }
 
+/// Shown in place of the rider card until a rider is assigned.
+///
+/// Deliberately has no call, chat or safety actions: there is nobody to call
+/// yet, and showing those controls is what made the old card read as though a
+/// rider existed.
+class _RiderSearchCard extends StatelessWidget {
+  const _RiderSearchCard({required this.state});
+
+  final RiderAssignmentState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final finding = state == RiderAssignmentState.finding;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 62,
+              height: 62,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (finding)
+                    const SizedBox(
+                      width: 62,
+                      height: 62,
+                      // Indeterminate: we do not know how long it will take,
+                      // so nothing here should suggest progress toward a time.
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  CircleAvatar(
+                    radius: 27,
+                    backgroundColor: AppColors.light,
+                    child: Icon(
+                      finding
+                          ? Icons.delivery_dining_rounded
+                          : Icons.storefront_rounded,
+                      size: 28,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    riderSearchTitle(state),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    riderSearchSubtitle(state),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class RiderInformationCard extends StatelessWidget {
   const RiderInformationCard({
     required this.name,
@@ -635,7 +730,10 @@ class RiderInformationCard extends StatelessWidget {
                           ),
                           Expanded(
                             child: Text(
-                              phone.isEmpty ? 'Assigned by restaurant' : phone,
+                              // Without a phone number this used to read
+                              // "Assigned by restaurant" — a guess, since the
+                              // rider may have come from platform dispatch.
+                              phone.isEmpty ? 'Your delivery partner' : phone,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
