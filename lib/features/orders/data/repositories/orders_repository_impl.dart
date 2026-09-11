@@ -301,6 +301,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       return Result.success(OrderTracking(
         orderId: readString(source, const ['id', 'order_id']),
         status: readString(source, const ['order_status', 'status']),
+        deliveryStatus: readString(source, const ['delivery_status']),
         statusLabel: readString(source, const [
           'status_message',
           'status_label',

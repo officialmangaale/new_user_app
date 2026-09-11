@@ -16,6 +16,7 @@ import 'live_tracking_map.dart';
 import 'puzzle_game.dart';
 import '../domain/rider_assignment_state.dart';
 import '../domain/tracking_refresh_policy.dart';
+import '../domain/tracking_timeline.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({
@@ -33,15 +34,7 @@ class TrackingScreen extends ConsumerStatefulWidget {
 
 class _TrackingScreenState extends ConsumerState<TrackingScreen>
     with WidgetsBindingObserver {
-  static const _statuses = [
-    'Order confirmed',
-    'Preparing',
-    'Rider assigned',
-    'Picked up',
-    'On the way',
-    'Arriving soon',
-    'Delivered',
-  ];
+  static const _statuses = trackingTimelineSteps;
 
   int _statusIndex = 0;
   bool _importantAlert = false;
@@ -54,6 +47,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   Timer? _pollTimer;
   bool _appInForeground = true;
   String _lastStatus = '';
+
+  /// While no rider is assigned yet the poll runs faster
+  /// (tracking_refresh_policy.dart).
+  bool _awaitingRider = false;
+  DateTime? _lastRefreshAt;
 
   OrderTrackingRequest get _request =>
       OrderTrackingRequest(orderId: widget.orderId, mode: widget.mode);
@@ -68,7 +66,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(trackingPollInterval, (_) {
+    // Ticks at the fastest interval; isTrackingRefreshDue decides whether
+    // this tick refreshes.
+    _pollTimer = Timer.periodic(trackingAwaitingRiderPollInterval, (_) {
       if (!mounted) return;
       if (!shouldPollTracking(
         status: _lastStatus,
@@ -76,8 +76,20 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       )) {
         return;
       }
-      ref.invalidate(orderTrackingProvider(_request));
+      if (!isTrackingRefreshDue(
+        lastRefreshAt: _lastRefreshAt,
+        now: DateTime.now(),
+        awaitingRider: _awaitingRider,
+      )) {
+        return;
+      }
+      _refresh();
     });
+  }
+
+  void _refresh() {
+    _lastRefreshAt = DateTime.now();
+    ref.invalidate(orderTrackingProvider(_request));
   }
 
   void _stopPolling() {
@@ -91,7 +103,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     if (_appInForeground && !isTerminalTrackingStatus(_lastStatus)) {
       // Returning from the background, the position may be minutes old.
       // Refresh now rather than waiting out the rest of the interval.
-      ref.invalidate(orderTrackingProvider(_request));
+      _refresh();
       _startPolling();
     }
   }
@@ -104,12 +116,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     final uri = Uri.parse('$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token');
     
     _channel = WebSocketChannel.connect(uri);
+    // Any event, whatever its payload, refetches the full snapshot: events
+    // may carry only the new status, the snapshot carries the rider too.
     _channel?.stream.listen(
       (_) {
-        if (mounted) ref.invalidate(orderTrackingProvider(_request));
+        if (mounted) _refresh();
       },
       onError: (_) {
-        if (mounted) ref.invalidate(orderTrackingProvider(_request));
+        if (mounted) _refresh();
       },
     );
   }
@@ -123,21 +137,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     super.dispose();
   }
 
-  /// Maps the backend's canonical order statuses
-  /// (restaurant-service/services/order_status_contract.go) onto this screen's
-  /// seven-step timeline.
-  int _indexForStatus(String status) => switch (status.toLowerCase()) {
-    'pending' || 'confirmed' || 'accepted' || 'placed' => 0,
-    'preparing' || 'packing' => 1,
-    'ready' || 'ready_to_serve' || 'packed' => 2,
-    'picked_up' => 3,
-    'out_for_delivery' || 'on_the_way' => 4,
-    'delivered' || 'completed' || 'done' => 6,
-    _ => 0,
-  };
-
-  void _syncStatus(String status) {
+  void _syncStatus(OrderTracking live) {
+    final status = live.status;
     _lastStatus = status;
+    _awaitingRider =
+        riderAssignmentState(status: status, riderName: live.riderName) ==
+        RiderAssignmentState.finding;
     // A delivered or cancelled order will never change again: stop both the
     // socket and the poll, so nothing keeps running for a finished order.
     if (isTerminalTrackingStatus(status)) {
@@ -145,7 +150,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       _channel = null;
       _stopPolling();
     }
-    final next = _indexForStatus(status);
+    final next = trackingTimelineIndex(
+      orderStatus: status,
+      deliveryStatus: live.deliveryStatus,
+      riderAssigned: live.riderName.trim().isNotEmpty,
+    );
     if (next == _statusIndex) return;
     // Defer: this runs during build, so state changes must wait a frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -165,7 +174,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   Widget build(BuildContext context) {
     final tracking = ref.watch(orderTrackingProvider(_request));
     final live = tracking.value;
-    if (live != null) _syncStatus(live.status);
+    if (live != null) _syncStatus(live);
 
     final eta = (live != null && live.etaMinutes > 0)
         ? '${live.etaMinutes} min'

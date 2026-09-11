@@ -39,10 +39,16 @@ class OrderTracking {
     this.restaurantLongitude,
     this.deliveryLatitude,
     this.deliveryLongitude,
+    this.deliveryStatus = '',
   });
 
   final String orderId;
   final String status;
+
+  /// The delivery's own progress (rider_assigned, picked_up,
+  /// out_for_delivery, delivered), alongside the order [status]. Empty when
+  /// the backend did not send it.
+  final String deliveryStatus;
   final String statusLabel;
   final int etaMinutes;
   final String riderName;

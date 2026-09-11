@@ -18,6 +18,28 @@ library;
 /// of occasionally re-fetching an unchanged one.
 const Duration trackingPollInterval = Duration(seconds: 15);
 
+/// While a delivery partner is being found. Rider assignment is not pushed on
+/// the order-status socket (restaurant-service announces it to the
+/// restaurant only), so polling is how the customer learns of it; 5 seconds
+/// keeps "Finding a delivery partner" from lingering after a rider accepts.
+const Duration trackingAwaitingRiderPollInterval = Duration(seconds: 5);
+
+/// How often to refresh right now.
+Duration trackingPollIntervalFor({required bool awaitingRider}) =>
+    awaitingRider ? trackingAwaitingRiderPollInterval : trackingPollInterval;
+
+/// Whether a poll tick should refresh, given when the snapshot was last
+/// requested (by a poll or a socket event).
+bool isTrackingRefreshDue({
+  required DateTime? lastRefreshAt,
+  required DateTime now,
+  required bool awaitingRider,
+}) {
+  if (lastRefreshAt == null) return true;
+  return now.difference(lastRefreshAt) >=
+      trackingPollIntervalFor(awaitingRider: awaitingRider);
+}
+
 /// Order statuses after which nothing more will change.
 const Set<String> terminalTrackingStatuses = {
   'delivered',
