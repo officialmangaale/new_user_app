@@ -135,6 +135,15 @@ class FetchOrdersUseCase {
   }
 }
 
+class FetchGroceryOrdersUseCase {
+  const FetchGroceryOrdersUseCase(this._repository);
+  final OrdersRepositoryInterface _repository;
+
+  Future<Result<GroceryOrderPage>> call({int page = 1, int limit = 10}) {
+    return _repository.fetchGroceryOrders(page: page, limit: limit);
+  }
+}
+
 class FetchActiveOrdersUseCase {
   const FetchActiveOrdersUseCase(this._repository);
   final OrdersRepositoryInterface _repository;

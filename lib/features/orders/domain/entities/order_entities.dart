@@ -40,10 +40,23 @@ class OrderTracking {
     this.deliveryLatitude,
     this.deliveryLongitude,
     this.deliveryStatus = '',
+    this.orderType = '',
+    this.statusReason = '',
+    this.timeline = const [],
   });
 
   final String orderId;
   final String status;
+
+  /// `grocery` for grocery orders; empty for food orders.
+  final String orderType;
+
+  /// Why a grocery order was rejected or cancelled, as the shop wrote it.
+  /// Empty for orders that were not stopped.
+  final String statusReason;
+
+  /// Recorded steps of a grocery order, oldest first.
+  final List<TrackingTimelineEntry> timeline;
 
   /// The delivery's own progress (rider_assigned, picked_up,
   /// out_for_delivery, delivered), alongside the order [status]. Empty when
@@ -112,6 +125,54 @@ bool isUsableCoordinate(double? latitude, double? longitude) {
   if (latitude < -90 || latitude > 90) return false;
   if (longitude < -180 || longitude > 180) return false;
   return !(latitude == 0 && longitude == 0);
+}
+
+/// One recorded step of an order's progress.
+class TrackingTimelineEntry {
+  const TrackingTimelineEntry({
+    required this.status,
+    required this.label,
+    this.at,
+  });
+
+  final String status;
+  final String label;
+  final DateTime? at;
+}
+
+/// A grocery order in the customer's history.
+///
+/// Grocery orders are listed and paginated separately from food orders, so
+/// pages of the two lists never interleave.
+class GroceryOrderSummary {
+  const GroceryOrderSummary({
+    required this.id,
+    required this.merchantName,
+    required this.status,
+    required this.statusLabel,
+    required this.total,
+    required this.itemCount,
+    this.createdAt,
+  });
+
+  final String id;
+  final String merchantName;
+  final String status;
+  final String statusLabel;
+  final double total;
+  final int itemCount;
+  final DateTime? createdAt;
+
+  /// Delivered, rejected or cancelled: nothing left to track.
+  bool get isFinished =>
+      const {'delivered', 'rejected', 'cancelled'}.contains(status);
+}
+
+class GroceryOrderPage {
+  const GroceryOrderPage({required this.orders, required this.hasMore});
+
+  final List<GroceryOrderSummary> orders;
+  final bool hasMore;
 }
 
 class BillSummary {

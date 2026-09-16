@@ -16,6 +16,13 @@ import 'package:turquoise_delivery/shared/repositories/account_repository.dart';
 
 /// Records the delivery details checkout sends.
 class _RecordingOrdersRepository implements OrdersRepositoryInterface {
+  @override
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({
+    int page = 1,
+    int limit = 10,
+  }) async =>
+      Result.success(const GroceryOrderPage(orders: [], hasMore: false));
+
   final List<Map<String, Object?>> orders = [];
 
   @override

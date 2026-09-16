@@ -15,6 +15,13 @@ import 'package:turquoise_delivery/features/orders/providers/orders_providers.da
 import 'package:turquoise_delivery/shared/repositories/account_repository.dart';
 
 class _FakeOrdersRepository implements OrdersRepositoryInterface {
+  @override
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({
+    int page = 1,
+    int limit = 10,
+  }) async =>
+      Result.success(const GroceryOrderPage(orders: [], hasMore: false));
+
   _FakeOrdersRepository({this.failure});
 
   /// When set, every call returns this failure instead of a placed order.

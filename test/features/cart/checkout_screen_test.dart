@@ -24,6 +24,13 @@ const _bill = BillSummary(
 );
 
 class _FakeOrdersRepository implements OrdersRepositoryInterface {
+  @override
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({
+    int page = 1,
+    int limit = 10,
+  }) async =>
+      Result.success(const GroceryOrderPage(orders: [], hasMore: false));
+
   _FakeOrdersRepository({this.failure, this.delay = Duration.zero});
 
   final Failure? failure;
