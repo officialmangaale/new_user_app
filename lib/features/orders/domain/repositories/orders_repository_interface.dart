@@ -62,4 +62,6 @@ abstract class OrdersRepositoryInterface {
   Future<Result<OrderTracking>> trackOrder(String orderId);
 
   Future<Result<OrderTracking>> trackGroceryOrder(String orderId);
+
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({int page = 1, int limit = 10});
 }

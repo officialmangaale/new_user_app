@@ -366,6 +366,8 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     try {
       final raw = await _get('/customer-web/grocery/orders/$orderId/track');
       final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final merchant = data['merchant'];
+      final orderType = readString(data, const ['order_type']);
       return Result.success(OrderTracking(
         orderId: readString(data, const ['grocery_order_id', 'id', 'order_id']),
         status: readString(data, const ['order_status', 'status']),
@@ -381,11 +383,53 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         ]),
         riderName: readString(data, const ['rider_name', 'delivery_partner']),
         riderPhone: readString(data, const ['rider_phone']),
+        restaurantName: merchant is Map
+            ? readString(Map<String, dynamic>.from(merchant), const ['name'])
+            : '',
+        orderType: orderType.isEmpty ? 'grocery' : orderType,
+        statusReason: readString(data, const ['status_reason']),
+        timeline: _trackingTimeline(data['timeline']),
       ));
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
   }
+
+  /// GET /customer-web/grocery/orders — the customer's grocery orders, newest
+  /// first. Paginated on its own and never merged page-by-page with food
+  /// orders.
+  @override
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final raw = await _get(
+        '/customer-web/grocery/orders',
+        query: <String, dynamic>{'page': page, 'limit': limit},
+      );
+      final pagination = raw is Map ? raw['pagination'] : null;
+      return Result.success(GroceryOrderPage(
+        orders: listFrom(raw, keys: const ['orders'])
+            .map(_groceryOrderSummary)
+            .toList(growable: false),
+        hasMore: pagination is Map && pagination['has_more'] == true,
+      ));
+    } on ApiException catch (error) {
+      return Result.failure(Failure.fromApiException(error));
+    }
+  }
+
+  GroceryOrderSummary _groceryOrderSummary(Map<String, dynamic> json) =>
+      GroceryOrderSummary(
+        id: readString(json, const ['grocery_order_id', 'id']),
+        merchantName: readString(json, const ['merchant_name']),
+        status: readString(json, const ['order_status', 'status']).toLowerCase(),
+        statusLabel: readString(json, const ['status_message']),
+        total: readDouble(json, const ['grand_total']),
+        itemCount: readInt(json, const ['item_count']),
+        createdAt: DateTime.tryParse(readString(json, const ['created_at'])),
+      );
 
   // ------------------------------------------------------------------
   // transport
@@ -461,6 +505,22 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         return OrderStatus.active;
     }
   }
+}
+
+List<TrackingTimelineEntry> _trackingTimeline(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final entry in raw)
+      if (entry is Map)
+        TrackingTimelineEntry(
+          status: readString(Map<String, dynamic>.from(entry), const ['status'])
+              .toLowerCase(),
+          label: readString(Map<String, dynamic>.from(entry), const ['label']),
+          at: DateTime.tryParse(
+            readString(Map<String, dynamic>.from(entry), const ['timestamp']),
+          ),
+        ),
+  ];
 }
 
 BillSummary _billSummaryFromJson(Map<String, dynamic> json) {

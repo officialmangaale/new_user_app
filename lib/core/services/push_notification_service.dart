@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:developer';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import 'grocery_push_open_broker.dart';
 
 /// Top-level background message handler for FCM.
 /// This must be a top-level function.
@@ -131,18 +134,27 @@ class PushNotificationService {
             presentSound: true,
           ),
         ),
+        payload: jsonEncode(message.data),
       );
     }
   }
 
   void _onMessageOpenedApp(RemoteMessage message) {
     log('Message opened app: ${message.messageId}');
-    // TODO: Handle navigation based on message.data if needed
-    // Example: If message.data['orderId'] exists, navigate to tracking screen
+    GroceryPushOpenBroker.instance.publishOpened(message.data);
   }
 
   void _onNotificationTapped(NotificationResponse response) {
-    log('Local notification tapped: ${response.payload}');
-    // TODO: Handle navigation from foreground tap
+    log('Local notification tapped');
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) {
+        GroceryPushOpenBroker.instance.publishOpened(decoded);
+      }
+    } on FormatException {
+      log('Ignoring a local notification with an unreadable payload');
+    }
   }
 }

@@ -16,6 +16,7 @@ import 'live_tracking_map.dart';
 import 'puzzle_game.dart';
 import '../domain/rider_assignment_state.dart';
 import '../domain/tracking_refresh_policy.dart';
+import '../domain/grocery_tracking.dart';
 import '../domain/tracking_timeline.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -60,7 +61,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _connectSocket();
+    // The order-status socket is keyed by food order id. Grocery orders have
+    // their own ids, so they refresh by polling only.
+    if (widget.mode != DeliveryMode.grocery) _connectSocket();
     _startPolling();
   }
 
@@ -174,6 +177,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   Widget build(BuildContext context) {
     final tracking = ref.watch(orderTrackingProvider(_request));
     final live = tracking.value;
+    if (widget.mode == DeliveryMode.grocery) {
+      if (live != null) _syncGroceryStatus(live);
+      return _buildGroceryTracking(context, tracking);
+    }
     if (live != null) _syncStatus(live);
 
     final eta = (live != null && live.etaMinutes > 0)
@@ -362,6 +369,75 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
           ],
         ),
       ),
+    );
+  }
+
+  /// Grocery orders have no rider, so only the status decides whether polling
+  /// continues.
+  void _syncGroceryStatus(OrderTracking live) {
+    _lastStatus = live.status;
+    _awaitingRider = false;
+    if (isTerminalTrackingStatus(live.status)) _stopPolling();
+  }
+
+  Widget _buildGroceryTracking(
+    BuildContext context,
+    AsyncValue<OrderTracking> tracking,
+  ) {
+    final live = tracking.value;
+    final Widget body;
+    if (live == null) {
+      body = tracking.hasError
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('We could not load this order.'),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppButton(label: 'Try again', onPressed: _refresh),
+                  ],
+                ),
+              ),
+            )
+          : const Center(child: CircularProgressIndicator());
+    } else {
+      final stopped = isGroceryOrderStopped(live.status);
+      body = RefreshIndicator(
+        onRefresh: () async => _refresh(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            _GroceryStatusCard(tracking: live),
+            const SizedBox(height: AppSpacing.md),
+            if (!stopped)
+              _StatusTimeline(
+                statuses: groceryTrackingStepLabels,
+                currentIndex: groceryTrackingIndex(live.status),
+              )
+            else
+              for (final entry in live.timeline)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    isGroceryOrderStopped(entry.status)
+                        ? Icons.cancel_outlined
+                        : Icons.check_circle_rounded,
+                    color: isGroceryOrderStopped(entry.status)
+                        ? AppColors.error
+                        : AppColors.success,
+                  ),
+                  title: Text(entry.label),
+                ),
+          ],
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text('Grocery order #${widget.orderId}')),
+      body: body,
     );
   }
 
@@ -911,6 +987,64 @@ class _StatusTimeline extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Current state of a grocery order. The shop packs and delivers it, so there
+/// is no rider card, map or rider search here.
+class _GroceryStatusCard extends StatelessWidget {
+  const _GroceryStatusCard({required this.tracking});
+
+  final OrderTracking tracking;
+
+  @override
+  Widget build(BuildContext context) {
+    final stopped = isGroceryOrderStopped(tracking.status);
+    final reason = tracking.statusReason.trim();
+    final message = tracking.statusLabel.trim();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              groceryStatusTitle(tracking.status),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: stopped ? AppColors.error : null,
+              ),
+            ),
+            if (tracking.restaurantName.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                tracking.restaurantName,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+            if (message.isNotEmpty && !stopped) ...[
+              const SizedBox(height: 8),
+              Text(message),
+            ],
+            if (stopped && reason.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Reason from the shop',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(reason),
+            ],
+            if (!stopped) ...[
+              const SizedBox(height: 12),
+              Text(
+                'The shop packs and delivers this order. Live rider tracking is not available for grocery orders.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

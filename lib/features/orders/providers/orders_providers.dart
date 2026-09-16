@@ -40,6 +40,11 @@ final fetchOrdersUseCaseProvider = Provider<FetchOrdersUseCase>((ref) {
   return FetchOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });
 
+final fetchGroceryOrdersUseCaseProvider =
+    Provider<FetchGroceryOrdersUseCase>((ref) {
+  return FetchGroceryOrdersUseCase(ref.watch(ordersRepositoryProvider));
+});
+
 final fetchActiveOrdersUseCaseProvider = Provider<FetchActiveOrdersUseCase>((ref) {
   return FetchActiveOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });
