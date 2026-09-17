@@ -69,10 +69,9 @@ final groceryMerchantsProvider = FutureProvider<List<Restaurant>>((ref) async {
   return _unwrap(result);
 });
 
-final nearestGroceryMerchantProvider = FutureProvider<Restaurant?>((ref) async {
-  final merchants = await ref.watch(groceryMerchantsProvider.future);
-  return merchants.isEmpty ? null : merchants.first;
-});
+/// Page size for grocery category and search results. The API pages; these
+/// screens show the first page.
+const _groceryResultsLimit = 50;
 
 /// Home category rail, scoped to the device location when available.
 final categoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
@@ -83,12 +82,16 @@ final categoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
   return _unwrap(result);
 });
 
+/// Grocery categories from every nearby shop, merged by name.
 final groceryCategoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
-  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
-  if (merchant == null) return const <HomeCategory>[];
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) return const <HomeCategory>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
-      .fetchGroceryCategories(merchant.id);
+      .fetchNearbyGroceryCategories(
+        lat: location.latitude,
+        lng: location.longitude,
+      );
   return _unwrap(result);
 });
 
@@ -108,40 +111,36 @@ final categoryItemsProvider = FutureProvider.family<List<CatalogItem>, String>((
   return _unwrap(result);
 });
 
+/// Grocery products from every nearby shop, nearest shop first.
 final nearbyGroceryProductsProvider = FutureProvider<List<CatalogItem>>((
   ref,
 ) async {
   final location = await ref.watch(currentLocationProvider.future);
   if (location == null) return const <CatalogItem>[];
-  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
-  if (merchant == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
-      .fetchGroceryProducts(
-        merchant.id,
+      .fetchNearbyGroceryProducts(
         lat: location.latitude,
         lng: location.longitude,
-        merchantName: merchant.name,
       );
-  return _unwrap(result);
+  return _unwrap(result).items;
 });
 
+/// Grocery products in one category across every nearby shop. The key is
+/// the category key from [groceryCategoriesProvider].
 final groceryCategoryItemsProvider =
-    FutureProvider.family<List<CatalogItem>, String>((ref, categoryId) async {
+    FutureProvider.family<List<CatalogItem>, String>((ref, categoryKey) async {
   final location = await ref.watch(currentLocationProvider.future);
   if (location == null) return const <CatalogItem>[];
-  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
-  if (merchant == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
-      .fetchGroceryProducts(
-        merchant.id,
+      .fetchNearbyGroceryProducts(
         lat: location.latitude,
         lng: location.longitude,
-        merchantName: merchant.name,
-        categoryId: categoryId,
+        categoryKey: categoryKey,
+        limit: _groceryResultsLimit,
       );
-  return _unwrap(result);
+  return _unwrap(result).items;
 });
 
 final grocerySearchResultsProvider =
@@ -150,27 +149,33 @@ final grocerySearchResultsProvider =
   if (trimmed.length < 2) return const <CatalogItem>[];
   final location = await ref.watch(currentLocationProvider.future);
   if (location == null) return const <CatalogItem>[];
-  final merchant = await ref.watch(nearestGroceryMerchantProvider.future);
-  if (merchant == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
-      .fetchGroceryProducts(
-        merchant.id,
+      .fetchNearbyGroceryProducts(
         lat: location.latitude,
         lng: location.longitude,
-        merchantName: merchant.name,
         search: trimmed,
+        limit: _groceryResultsLimit,
       );
-  return _unwrap(result);
+  return _unwrap(result).items;
 });
 
+/// One grocery product, fetched by id so deep links and items outside the
+/// home rail resolve.
 final groceryProductDetailProvider =
     FutureProvider.family<CatalogItem, String>((ref, productId) async {
-  final products = await ref.watch(nearbyGroceryProductsProvider.future);
-  for (final product in products) {
-    if (product.id == productId) return product;
+  final location = await ref.watch(currentLocationProvider.future);
+  if (location == null) {
+    throw Exception('Turn on location to see grocery products near you.');
   }
-  throw Exception('This grocery product is not available near you right now.');
+  final result = await ref
+      .watch(catalogRepositoryProvider)
+      .fetchGroceryProductDetail(
+        productId,
+        lat: location.latitude,
+        lng: location.longitude,
+      );
+  return _unwrap(result);
 });
 
 /// Cross-restaurant search. Empty query returns nothing rather than the whole

@@ -993,7 +993,8 @@ class _StatusTimeline extends StatelessWidget {
 }
 
 /// Current state of a grocery order. The shop packs and delivers it, so there
-/// is no rider card, map or rider search here.
+/// is no rider search or map here; the shop's own rider, once assigned, is
+/// named with their number.
 class _GroceryStatusCard extends StatelessWidget {
   const _GroceryStatusCard({required this.tracking});
 
@@ -1004,6 +1005,8 @@ class _GroceryStatusCard extends StatelessWidget {
     final stopped = isGroceryOrderStopped(tracking.status);
     final reason = tracking.statusReason.trim();
     final message = tracking.statusLabel.trim();
+    final riderName = tracking.riderName.trim();
+    final riderPhone = tracking.riderPhone.trim();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -1036,7 +1039,22 @@ class _GroceryStatusCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(reason),
             ],
-            if (!stopped) ...[
+            if (!stopped && riderName.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Delivered by $riderName',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              if (riderPhone.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                SelectableText(riderPhone),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'A rider from the shop delivers this order. Live rider location is not available for grocery orders.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ] else if (!stopped) ...[
               const SizedBox(height: 12),
               Text(
                 'The shop packs and delivers this order. Live rider tracking is not available for grocery orders.',

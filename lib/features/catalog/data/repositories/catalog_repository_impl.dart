@@ -334,6 +334,88 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
   }
 
   @override
+  Future<Result<GroceryProductPage>> fetchNearbyGroceryProducts({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+    String? categoryKey,
+    String? search,
+    int page = 1,
+    int limit = 20,
+  }) {
+    return _run(() async {
+      final data = await _getObject(
+        '/customer-web/grocery/products',
+        query: <String, dynamic>{
+          'lat': lat,
+          'lng': lng,
+          'radius_km': radiusKm,
+          if (categoryKey != null && categoryKey.trim().isNotEmpty)
+            'category_key': categoryKey.trim(),
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+          'page': page,
+          'limit': limit,
+        },
+      );
+      return GroceryProductPage(
+        items: readList(data, 'products')
+            .map((json) => _groceryProduct(json))
+            .toList(growable: false),
+        hasMore: readBool(data, const ['has_more']),
+      );
+    });
+  }
+
+  @override
+  Future<Result<List<HomeCategory>>> fetchNearbyGroceryCategories({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+  }) {
+    return _run(() async {
+      final raw = await _get(
+        '/customer-web/grocery/categories',
+        query: <String, dynamic>{'lat': lat, 'lng': lng, 'radius_km': radiusKm},
+      );
+      return listFrom(raw, keys: const ['categories'])
+          .map(
+            (json) => HomeCategory(
+              key: readString(json, const ['category_key']),
+              name: readString(json, const ['name']),
+              imageUrl: readString(json, const ['image_url']),
+              icon: 'grocery',
+              itemCount: readInt(json, const ['product_count']),
+            ),
+          )
+          .where(
+            (category) => category.name.isNotEmpty && category.key.isNotEmpty,
+          )
+          .toList(growable: false);
+    });
+  }
+
+  @override
+  Future<Result<CatalogItem>> fetchGroceryProductDetail(
+    String productId, {
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+  }) {
+    return _run(() async {
+      final data = await _getObject(
+        '/customer-web/grocery/products/${Uri.encodeComponent(productId)}',
+        query: <String, dynamic>{'lat': lat, 'lng': lng, 'radius_km': radiusKm},
+      );
+      final product = data['product'];
+      if (product is! Map) {
+        throw const FormatException('grocery product response has no product');
+      }
+      return _groceryProduct(Map<String, dynamic>.from(product));
+    });
+  }
+
+  @override
   Future<Result<List<Restaurant>>> searchRestaurants(String query) {
     return _run(() async {
       final raw = await _get(
