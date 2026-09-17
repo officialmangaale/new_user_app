@@ -64,6 +64,35 @@ abstract interface class CatalogRepositoryInterface {
     String? search,
   });
 
+  /// Fetches in-stock grocery products from every shop that delivers to the
+  /// location, nearest shop first. [categoryKey] is a category name matched
+  /// across shops.
+  Future<Result<GroceryProductPage>> fetchNearbyGroceryProducts({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+    String? categoryKey,
+    String? search,
+    int page = 1,
+    int limit = 20,
+  });
+
+  /// Fetches grocery categories with products near the location, merged by
+  /// name across shops.
+  Future<Result<List<HomeCategory>>> fetchNearbyGroceryCategories({
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+  });
+
+  /// Fetches one grocery product if it is available to the location.
+  Future<Result<CatalogItem>> fetchGroceryProductDetail(
+    String productId, {
+    required double lat,
+    required double lng,
+    double radiusKm = 7,
+  });
+
   /// Searches restaurants by query.
   Future<Result<List<Restaurant>>> searchRestaurants(String query);
 

@@ -1,8 +1,8 @@
 /// Progress of a grocery order for the tracking screen.
 ///
-/// Grocery orders are packed and delivered by the shop. Platform riders are
-/// not assigned to them in this phase, so none of the food rider steps apply
-/// and nothing here may suggest a rider exists.
+/// Grocery orders are packed and delivered by the shop, sometimes by one of the
+/// shop's own riders. Platform riders are never assigned, so none of the food
+/// rider steps (rider search, live rider location) apply.
 ///
 /// Pure, so every rule is testable without a device.
 library;

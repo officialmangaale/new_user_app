@@ -92,6 +92,14 @@ Future<AddToCartOutcome> addItemToCart(
     return AddToCartOutcome.unavailable;
   }
 
+  // Grocery lists mix products from several shops, but an order comes from
+  // one shop. Adding another shop's product empties the grocery cart, so ask
+  // first. The check is synchronous, so ordinary adds stay synchronous.
+  if (_switchesGroceryShop(ref, item, storeId)) {
+    final replace = await _confirmGroceryShopSwitch(context, ref, item);
+    if (!replace || !context.mounted) return AddToCartOutcome.cancelled;
+  }
+
   if (!item.needsCustomisation) {
     controller.addItem(item, restaurantId: storeId);
     celebrate();
@@ -143,6 +151,52 @@ Future<AddToCartOutcome> addItemToCart(
   } finally {
     pending.remove(requestKey);
   }
+}
+
+/// True when adding [item] would empty a grocery cart holding another shop's
+/// products.
+bool _switchesGroceryShop(WidgetRef ref, CatalogItem item, String storeId) {
+  if (item.type != CatalogItemType.grocery || storeId.isEmpty) return false;
+  final cart = ref.read(cartControllerProvider);
+  return cart.groceryCart.isNotEmpty &&
+      cart.cartGroceryMerchantId.isNotEmpty &&
+      cart.cartGroceryMerchantId != storeId;
+}
+
+Future<bool> _confirmGroceryShopSwitch(
+  BuildContext context,
+  WidgetRef ref,
+  CatalogItem item,
+) async {
+  final cart = ref.read(cartControllerProvider);
+  final currentShop = cart.groceryCart.keys
+      .map((lineId) => cart.knownItems[lineId]?.item.store ?? '')
+      .firstWhere((name) => name.isNotEmpty, orElse: () => '');
+  final from = currentShop.isEmpty ? 'another shop' : currentShop;
+  final newShop = item.store.isEmpty ? 'a different shop' : item.store;
+  final replace = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Replace your grocery cart?'),
+      content: Text(
+        'Your cart has items from $from. A grocery order comes from one shop, '
+        'so adding ${item.name} from $newShop will remove them.',
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('grocery_shop_switch_keep'),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Keep cart'),
+        ),
+        FilledButton(
+          key: const ValueKey('grocery_shop_switch_replace'),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Replace'),
+        ),
+      ],
+    ),
+  );
+  return replace ?? false;
 }
 
 void _notify(BuildContext context, String message) {

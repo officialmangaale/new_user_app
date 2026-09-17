@@ -199,6 +199,14 @@ class HomeFeed {
   final List<HomeBanner> banners;
 }
 
+/// One page of grocery products from every nearby shop.
+class GroceryProductPage {
+  const GroceryProductPage({required this.items, required this.hasMore});
+
+  final List<CatalogItem> items;
+  final bool hasMore;
+}
+
 /// Mixed global search payload from `/customer-web/search`.
 class CatalogSearchResults {
   const CatalogSearchResults({
