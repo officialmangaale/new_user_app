@@ -5,6 +5,7 @@ import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/location_providers.dart';
 import '../../cart/providers/cart_controller.dart';
+import '../../app_state/providers/app_controller.dart';
 import '../data/repositories/orders_repository_impl.dart';
 import '../domain/repositories/orders_repository_interface.dart';
 import '../domain/use_cases/orders_use_cases.dart';
@@ -18,17 +19,19 @@ final validateCartUseCaseProvider = Provider<ValidateCartUseCase>((ref) {
   return ValidateCartUseCase(ref.watch(ordersRepositoryProvider));
 });
 
-final validateGroceryCartUseCaseProvider =
-    Provider<ValidateGroceryCartUseCase>((ref) {
-  return ValidateGroceryCartUseCase(ref.watch(ordersRepositoryProvider));
-});
+final validateGroceryCartUseCaseProvider = Provider<ValidateGroceryCartUseCase>(
+  (ref) {
+    return ValidateGroceryCartUseCase(ref.watch(ordersRepositoryProvider));
+  },
+);
 
 final placeOrderUseCaseProvider = Provider<PlaceOrderUseCase>((ref) {
   return PlaceOrderUseCase(ref.watch(ordersRepositoryProvider));
 });
 
-final placeGroceryOrderUseCaseProvider =
-    Provider<PlaceGroceryOrderUseCase>((ref) {
+final placeGroceryOrderUseCaseProvider = Provider<PlaceGroceryOrderUseCase>((
+  ref,
+) {
   return PlaceGroceryOrderUseCase(ref.watch(ordersRepositoryProvider));
 });
 
@@ -40,12 +43,15 @@ final fetchOrdersUseCaseProvider = Provider<FetchOrdersUseCase>((ref) {
   return FetchOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });
 
-final fetchGroceryOrdersUseCaseProvider =
-    Provider<FetchGroceryOrdersUseCase>((ref) {
+final fetchGroceryOrdersUseCaseProvider = Provider<FetchGroceryOrdersUseCase>((
+  ref,
+) {
   return FetchGroceryOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });
 
-final fetchActiveOrdersUseCaseProvider = Provider<FetchActiveOrdersUseCase>((ref) {
+final fetchActiveOrdersUseCaseProvider = Provider<FetchActiveOrdersUseCase>((
+  ref,
+) {
   return FetchActiveOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });
 
@@ -56,7 +62,6 @@ final fetchOrderUseCaseProvider = Provider<FetchOrderUseCase>((ref) {
 final validateCouponUseCaseProvider = Provider<ValidateCouponUseCase>((ref) {
   return ValidateCouponUseCase(ref.watch(ordersRepositoryProvider));
 });
-
 
 // Account Repository (To be moved in Phase 5)
 final accountRepositoryProvider = Provider<AccountRepository>((ref) {
@@ -71,7 +76,9 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 // logout, and the next person on a shared device sees the previous customer's
 // orders, name, phone, addresses or payment methods. This matches
 // favorites_provider.dart, which already scopes per-customer data this way.
-final ordersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((ref) async {
+final ordersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((
+  ref,
+) async {
   final result = await ref.watch(fetchOrdersUseCaseProvider)();
   return result.when(
     success: (data) => data,
@@ -79,7 +86,9 @@ final ordersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((ref) asy
   );
 });
 
-final activeOrdersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((ref) async {
+final activeOrdersProvider = FutureProvider.autoDispose<List<DeliveryOrder>>((
+  ref,
+) async {
   final result = await ref.watch(fetchActiveOrdersUseCaseProvider)();
   return result.when(
     success: (data) => data,
@@ -109,16 +118,16 @@ class OrderTrackingRequest {
 
 final orderTrackingProvider =
     FutureProvider.family<OrderTracking, OrderTrackingRequest>((
-  ref,
-  request,
-) async {
-  final useCase = ref.watch(trackOrderUseCaseProvider);
-  final result = await useCase(request.orderId, mode: request.mode);
-  return result.when(
-    success: (data) => data,
-    failure: (failure) => throw failure,
-  );
-});
+      ref,
+      request,
+    ) async {
+      final useCase = ref.watch(trackOrderUseCaseProvider);
+      final result = await useCase(request.orderId, mode: request.mode);
+      return result.when(
+        success: (data) => data,
+        failure: (failure) => throw failure,
+      );
+    });
 
 final notificationsProvider = FutureProvider<List<AppNotificationItem>>((ref) {
   return ref.watch(accountRepositoryProvider).fetchNotifications();
@@ -128,11 +137,15 @@ final profileProvider = FutureProvider.autoDispose<CustomerProfile>((ref) {
   return ref.watch(accountRepositoryProvider).fetchProfile();
 });
 
-final addressesProvider = FutureProvider.autoDispose<List<CustomerAddress>>((ref) {
+final addressesProvider = FutureProvider.autoDispose<List<CustomerAddress>>((
+  ref,
+) {
   return ref.watch(accountRepositoryProvider).fetchAddresses();
 });
 
-final paymentMethodsProvider = FutureProvider.autoDispose<List<PaymentMethod>>((ref) {
+final paymentMethodsProvider = FutureProvider.autoDispose<List<PaymentMethod>>((
+  ref,
+) {
   return ref.watch(accountRepositoryProvider).fetchPaymentMethods();
 });
 
@@ -142,106 +155,68 @@ final paymentMethodsProvider = FutureProvider.autoDispose<List<PaymentMethod>>((
 /// returns — the app never computes money itself. Recomputes whenever the cart
 /// changes so the checkout button always shows the amount the backend will
 /// actually charge.
+class CartCoupon extends Notifier<String> {
+  @override
+  String build() {
+    ref.watch(cartControllerProvider.select((s) => s.cartRestaurantId));
+    ref.watch(appControllerProvider.select((s) => s.authenticated));
+    return '';
+  }
+
+  void setCode(String code) => state = code.trim();
+}
+
+final cartCouponProvider = NotifierProvider<CartCoupon, String>(CartCoupon.new);
+
 final cartBillProvider = FutureProvider<BillSummary>((ref) async {
-  final restaurantId = ref.watch(
-    cartControllerProvider.select((state) => state.cartRestaurantId),
-  );
-  final groceryMerchantId = ref.watch(
-    cartControllerProvider.select((state) => state.cartGroceryMerchantId),
-  );
+  final cart = ref.watch(cartControllerProvider);
   final lines = ref.watch(cartLinesProvider);
-
-  if (lines.isEmpty) {
-    return const BillSummary(
-      subtotal: 0,
-      discount: 0,
-      deliveryFee: 0,
-      packagingCharge: 0,
-      cgst: 0,
-      sgst: 0,
-      taxAmount: 0,
-      platformFee: 0,
-      roundOff: 0,
-      grandTotal: 0,
-      valid: false,
-      message: 'Your cart is empty.',
-    );
-  }
-
-  final grocery = lines.first.item.type == CatalogItemType.grocery;
-  if (grocery) {
-    final effectiveGroceryMerchantId = groceryMerchantId.isNotEmpty
-        ? groceryMerchantId
-        : lines.first.item.storeId;
-    if (effectiveGroceryMerchantId.isEmpty) {
-      return const BillSummary(
-        subtotal: 0,
-        discount: 0,
-        deliveryFee: 0,
-        packagingCharge: 0,
-        cgst: 0,
-        sgst: 0,
-        taxAmount: 0,
-        platformFee: 0,
-        roundOff: 0,
-        grandTotal: 0,
-        valid: false,
-        message: 'Please reopen the grocery store and add items again.',
-      );
-    }
-    final location = await ref.watch(currentLocationProvider.future);
-    if (location == null) {
-      return const BillSummary(
-        subtotal: 0,
-        discount: 0,
-        deliveryFee: 0,
-        packagingCharge: 0,
-        cgst: 0,
-        sgst: 0,
-        taxAmount: 0,
-        platformFee: 0,
-        roundOff: 0,
-        grandTotal: 0,
-        valid: false,
-        message: 'Turn on location to price grocery delivery near you.',
-      );
-    }
-    final result = await ref.watch(validateGroceryCartUseCaseProvider)(
-      groceryMerchantId: effectiveGroceryMerchantId,
-      lines: lines,
-      deliveryLatitude: location.latitude,
-      deliveryLongitude: location.longitude,
-    );
-    return result.when(
-      success: (data) => data,
-      failure: (failure) => throw failure,
-    );
-  }
-
-  if (restaurantId.isEmpty) {
-    return const BillSummary(
-      subtotal: 0,
-      discount: 0,
-      deliveryFee: 0,
-      packagingCharge: 0,
-      cgst: 0,
-      sgst: 0,
-      taxAmount: 0,
-      platformFee: 0,
-      roundOff: 0,
-      grandTotal: 0,
-      valid: false,
-      message: 'Please reopen the restaurant and add items again.',
-    );
-  }
-
-  final result = await ref.watch(validateCartUseCaseProvider)(
-    restaurantId: restaurantId,
-    lines: lines,
+  final coupon = ref.watch(cartCouponProvider);
+  final authenticated = ref.watch(
+    appControllerProvider.select((s) => s.authenticated),
   );
-
+  final foodValidator = ref.watch(validateCartUseCaseProvider);
+  final groceryValidator = ref.watch(validateGroceryCartUseCaseProvider);
+  // Register dependencies before any async gap.
+  final addressesFuture = authenticated
+      ? ref.watch(addressesProvider.future)
+      : null;
+  final locationFuture = ref.watch(currentLocationProvider.future);
+  if (lines.isEmpty) throw StateError('Your cart is empty.');
+  final addresses = addressesFuture == null
+      ? const <CustomerAddress>[]
+      : await addressesFuture;
+  final address =
+      addresses.where((a) => a.isDefault).firstOrNull ?? addresses.firstOrNull;
+  final location = address?.hasPin == true ? null : await locationFuture;
+  final latitude = address?.hasPin == true
+      ? address!.latitude
+      : location?.latitude;
+  final longitude = address?.hasPin == true
+      ? address!.longitude
+      : location?.longitude;
+  if (latitude == null || longitude == null) {
+    throw StateError('Add a delivery location to see prices.');
+  }
+  final grocery = lines.first.item.type == CatalogItemType.grocery;
+  final result = grocery
+      ? await groceryValidator(
+          groceryMerchantId: cart.cartGroceryMerchantId.isNotEmpty
+              ? cart.cartGroceryMerchantId
+              : lines.first.item.storeId,
+          lines: lines,
+          deliveryLatitude: latitude,
+          deliveryLongitude: longitude,
+        )
+      : await foodValidator(
+          restaurantId: cart.cartRestaurantId,
+          lines: lines,
+          couponCode: coupon.isEmpty ? null : coupon,
+          deliveryLatitude: latitude,
+          deliveryLongitude: longitude,
+        );
   return result.when(
-    success: (data) => data,
+    success: (bill) => bill,
     failure: (failure) => throw failure,
   );
-});
+}, retry: (_, _) => null);

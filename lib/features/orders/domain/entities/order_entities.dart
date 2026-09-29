@@ -96,7 +96,8 @@ class OrderTracking {
   static const Duration staleAfter = Duration(seconds: 90);
 
   /// True when there is a real position to show on a map or hand to Maps.
-  bool get hasRiderLocation => isUsableCoordinate(riderLatitude, riderLongitude);
+  bool get hasRiderLocation =>
+      isUsableCoordinate(riderLatitude, riderLongitude);
 
   bool get hasRestaurantLocation =>
       isUsableCoordinate(restaurantLatitude, restaurantLongitude);
@@ -189,21 +190,58 @@ class BillSummary {
     required this.grandTotal,
     required this.valid,
     required this.message,
+    this.additionalCharges = 0,
+    this.offerDiscount = 0,
+    this.tipAmount = 0,
+    this.items = const [],
+    this.fees = const [],
   });
 
-  final int subtotal;
-  final int discount;
-  final int deliveryFee;
-  final int packagingCharge;
+  final double subtotal;
+  final double discount;
+  final double deliveryFee;
+  final double packagingCharge;
   final double cgst;
   final double sgst;
   final double taxAmount;
-  final int platformFee;
+  final double platformFee;
   final double roundOff;
-  final int grandTotal;
+  final double grandTotal;
   final bool valid;
   final String message;
+  final double additionalCharges;
+  final double offerDiscount;
+  final double tipAmount;
+  final List<BillItem> items;
+  final List<BillFee> fees;
 }
+
+class BillItem {
+  const BillItem({
+    required this.itemId,
+    required this.quantity,
+    required this.sellingPrice,
+    required this.lineTotal,
+    this.originalPrice,
+    this.discount = 0,
+  });
+  final String itemId;
+  final int quantity;
+  final double sellingPrice;
+  final double? originalPrice;
+  final double discount;
+  final double lineTotal;
+}
+
+class BillFee {
+  const BillFee(this.title, this.amount);
+  final String title;
+  final double amount;
+}
+
+String formatMoney(num amount) => amount == amount.roundToDouble()
+    ? amount.toStringAsFixed(0)
+    : amount.toStringAsFixed(2);
 
 class CouponResult {
   const CouponResult({

@@ -1,3 +1,4 @@
+import 'checkout_bill_fixture.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +43,7 @@ class _RecordingOrdersRepository implements OrdersRepositoryInterface {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   }) async {
     orders.add({
       'line1': deliveryAddressLine1,
@@ -136,6 +138,7 @@ void main() {
     gpsReads = 0;
     final container = ProviderContainer(
       overrides: [
+        cartBillProvider.overrideWith((ref) async => checkoutBill),
         currentLocationProvider.overrideWith((ref) async {
           gpsReads++;
           return device;
@@ -163,9 +166,10 @@ void main() {
     return container;
   }
 
-  Future<Result<PlacedOrder>> place(ProviderContainer container) => container
-      .read(checkoutViewModelProvider.notifier)
-      .placeOrder(idempotencyKey: 'k', paymentMethod: 'cash');
+  Future<Result<PlacedOrder>> place(ProviderContainer container) async {
+    await container.read(cartBillProvider.future);
+    return container.read(checkoutViewModelProvider.notifier).placeOrder(idempotencyKey: 'k', paymentMethod: 'cash');
+  }
 
   // An order to "Home" placed from the office used to be pinned at the office.
   test('a pinned address is delivered to its own pin, not the phone', () async {

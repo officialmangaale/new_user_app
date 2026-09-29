@@ -10,11 +10,15 @@ class ValidateCartUseCase {
     required String restaurantId,
     required List<CartLine> lines,
     String? couponCode,
+    double? deliveryLatitude,
+    double? deliveryLongitude,
   }) {
     return _repository.validateCart(
       restaurantId: restaurantId,
       lines: lines,
       couponCode: couponCode,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
     );
   }
 }
@@ -58,6 +62,7 @@ class PlaceOrderUseCase {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   }) {
     return _repository.placeOrder(
       restaurantId: restaurantId,
@@ -75,6 +80,7 @@ class PlaceOrderUseCase {
       paymentMethod: paymentMethod,
       couponCode: couponCode,
       instructions: instructions,
+      expectedPayable: expectedPayable,
     );
   }
 }
@@ -95,6 +101,7 @@ class PlaceGroceryOrderUseCase {
     String? deliveryLandmark,
     String? paymentMethod,
     String? instructions,
+    double? expectedPayable,
   }) {
     return _repository.placeGroceryOrder(
       groceryMerchantId: groceryMerchantId,
@@ -108,6 +115,7 @@ class PlaceGroceryOrderUseCase {
       deliveryLandmark: deliveryLandmark,
       paymentMethod: paymentMethod,
       instructions: instructions,
+      expectedPayable: expectedPayable,
     );
   }
 }

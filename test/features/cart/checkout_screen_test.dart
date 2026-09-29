@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,9 +19,18 @@ import 'package:turquoise_delivery/features/orders/providers/orders_providers.da
 import 'package:turquoise_delivery/shared/repositories/account_repository.dart';
 
 const _bill = BillSummary(
-  subtotal: 70, discount: 0, deliveryFee: 0, packagingCharge: 0,
-  cgst: 0, sgst: 0, taxAmount: 0, platformFee: 0, roundOff: 0,
-  grandTotal: 70, valid: true, message: '',
+  subtotal: 70,
+  discount: 0,
+  deliveryFee: 0,
+  packagingCharge: 0,
+  cgst: 0,
+  sgst: 0,
+  taxAmount: 0,
+  platformFee: 0,
+  roundOff: 0,
+  grandTotal: 70,
+  valid: true,
+  message: '',
 );
 
 class _FakeOrdersRepository implements OrdersRepositoryInterface {
@@ -54,13 +64,19 @@ class _FakeOrdersRepository implements OrdersRepositoryInterface {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   }) async {
     placeOrderCalls++;
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (failure != null) return Result.failure(failure!);
-    return Result.success(const PlacedOrder(
-      orderId: '4242', orderNumber: 'ORD-4242', status: 'pending', bill: _bill,
-    ));
+    return Result.success(
+      const PlacedOrder(
+        orderId: '4242',
+        orderNumber: 'ORD-4242',
+        status: 'pending',
+        bill: _bill,
+      ),
+    );
   }
 
   @override
@@ -71,17 +87,26 @@ class _FakeOrdersRepository implements OrdersRepositoryInterface {
 class _FakeAccountRepository implements AccountRepository {
   @override
   Future<CustomerProfile> fetchProfile() async => const CustomerProfile(
-        id: 'u1', name: 'Test Customer', phone: '9876543210', email: '',
-      );
+    id: 'u1',
+    name: 'Test Customer',
+    phone: '9876543210',
+    email: '',
+  );
 
   @override
   Future<List<CustomerAddress>> fetchAddresses() async => const [
-        CustomerAddress(
-          id: 'a1', label: 'Home', addressLine1: '12 MG Road', area: 'Indiranagar',
-          city: 'Bengaluru', pincode: '560038', latitude: 12.97, longitude: 77.64,
-          isDefault: true,
-        ),
-      ];
+    CustomerAddress(
+      id: 'a1',
+      label: 'Home',
+      addressLine1: '12 MG Road',
+      area: 'Indiranagar',
+      city: 'Bengaluru',
+      pincode: '560038',
+      latitude: 12.97,
+      longitude: 77.64,
+      isDefault: true,
+    ),
+  ];
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -91,32 +116,38 @@ class _FakeAccountRepository implements AccountRepository {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({
-        'auth_token': 'test-token',
-        'auth_user_name': 'Test Customer',
-        'auth_user_phone': '9876543210',
-      }));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      'auth_token': 'test-token',
+      'auth_user_name': 'Test Customer',
+      'auth_user_phone': '9876543210',
+    }),
+  );
 
   const item = CatalogItem(
-    id: 'item-1', name: 'Veg Roll', subtitle: '', store: 'Test Kitchen',
-    price: 70, originalPrice: 70, imageUrl: '',
-    type: CatalogItemType.food, storeId: '9',
+    id: 'item-1',
+    name: 'Veg Roll',
+    subtitle: '',
+    store: 'Test Kitchen',
+    price: 70,
+    originalPrice: 70,
+    imageUrl: '',
+    type: CatalogItemType.food,
+    storeId: '9',
   );
 
   /// Pumps the real CheckoutScreen behind a router, so a successful order can
   /// actually navigate to /tracking/:id the way it does in the app.
   Future<String> pumpCheckout(
     WidgetTester tester,
-    _FakeOrdersRepository repository,
-  ) async {
+    _FakeOrdersRepository repository, {
+    Future<BillSummary> Function()? quote,
+  }) async {
     var location = '/checkout';
     final router = GoRouter(
       initialLocation: '/checkout',
       routes: [
-        GoRoute(
-          path: '/checkout',
-          builder: (_, _) => const CheckoutScreen(),
-        ),
+        GoRoute(path: '/checkout', builder: (_, _) => const CheckoutScreen()),
         GoRoute(
           path: '/tracking/:id',
           builder: (_, state) {
@@ -129,7 +160,9 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
-        cartBillProvider.overrideWith((ref) async => _bill),
+        cartBillProvider.overrideWith(
+          (ref) => quote?.call() ?? Future.value(_bill),
+        ),
         currentLocationProvider.overrideWith((ref) async {
           // A real GPS fix is not instant; this is what disposed the
           // checkout notifier mid-flight before the fix.
@@ -137,13 +170,15 @@ void main() {
           return null;
         }),
         accountRepositoryProvider.overrideWithValue(_FakeAccountRepository()),
-        placeOrderUseCaseProvider
-            .overrideWithValue(PlaceOrderUseCase(repository)),
+        placeOrderUseCaseProvider.overrideWithValue(
+          PlaceOrderUseCase(repository),
+        ),
       ],
     );
     addTearDown(container.dispose);
     // Seed before the first frame: mutating a provider during build is illegal.
-    container.read(cartControllerProvider.notifier)
+    container
+        .read(cartControllerProvider.notifier)
         .addItem(item, restaurantId: '9');
 
     await tester.pumpWidget(
@@ -163,8 +198,9 @@ void main() {
   /// The idle label, absent while the order is in flight.
   Finder payLabel() => find.textContaining('Pay ₹');
 
-  testWidgets('tapping Pay shows a spinner and lands on order tracking',
-      (tester) async {
+  testWidgets('tapping Pay shows a spinner and lands on order tracking', (
+    tester,
+  ) async {
     final repository = _FakeOrdersRepository(
       delay: const Duration(milliseconds: 50),
     );
@@ -182,8 +218,9 @@ void main() {
     expect(find.text('tracking'), findsOneWidget);
   });
 
-  testWidgets('a backend failure shows a snackbar and re-enables the button',
-      (tester) async {
+  testWidgets('a backend failure shows a snackbar and re-enables the button', (
+    tester,
+  ) async {
     final repository = _FakeOrdersRepository(
       delay: const Duration(milliseconds: 20),
       failure: const ValidationFailure('restaurant is not active'),
@@ -211,7 +248,72 @@ void main() {
     await tester.tap(payButton(), warnIfMissed: false);
 
     await tester.pumpAndSettle();
-    expect(repository.placeOrderCalls, 1,
-        reason: 'double-submit must never create a second order');
+    expect(
+      repository.placeOrderCalls,
+      1,
+      reason: 'double-submit must never create a second order',
+    );
+  });
+  testWidgets(
+    'loading and failed pricing disable payment and retry restores it',
+    (tester) async {
+      final repository = _FakeOrdersRepository();
+      final pending = Completer<BillSummary>();
+      var calls = 0;
+      await pumpCheckout(
+        tester,
+        repository,
+        quote: () {
+          calls++;
+          return calls == 1 ? pending.future : Future.value(_bill);
+        },
+      );
+      expect(tester.widget<AppButton>(payButton()).onPressed, isNull);
+      expect(find.textContaining('Pay ₹'), findsNothing);
+      pending.completeError(const ValidationFailure('Coupon expired'));
+      await tester.pumpAndSettle();
+      expect(find.text('Coupon expired'), findsOneWidget);
+      expect(tester.widget<AppButton>(payButton()).onPressed, isNull);
+      expect(repository.placeOrderCalls, 0);
+      await tester.tap(find.text('Retry pricing'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AppButton>(payButton()).onPressed, isNotNull);
+      expect(find.text('Pay ₹70 with Cash on Delivery'), findsOneWidget);
+    },
+  );
+
+  testWidgets('checkout renders every backend charge with decimal precision', (
+    tester,
+  ) async {
+    final repository = _FakeOrdersRepository();
+    await pumpCheckout(
+      tester,
+      repository,
+      quote: () async => const BillSummary(
+        subtotal: 100.25,
+        discount: 10.75,
+        deliveryFee: 20.25,
+        packagingCharge: 4.25,
+        additionalCharges: 1.75,
+        offerDiscount: 3.25,
+        cgst: 0,
+        sgst: 0,
+        taxAmount: 5.25,
+        platformFee: 2.50,
+        roundOff: -0.25,
+        grandTotal: 120.50,
+        valid: true,
+        message: '',
+        fees: [BillFee('Handling', 1.25)],
+      ),
+    );
+    expect(find.text('Pay ₹120.50 with Cash on Delivery'), findsOneWidget);
+    expect(find.text('₹100.25'), findsOneWidget);
+    expect(find.text('₹4.25'), findsOneWidget);
+    expect(find.text('₹1.75'), findsOneWidget);
+    expect(find.text('−₹10.75'), findsOneWidget);
+    expect(find.text('−₹3.25'), findsOneWidget);
+    expect(find.text('₹5.25'), findsOneWidget);
+    expect(find.text('Handling'), findsOneWidget);
   });
 }

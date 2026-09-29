@@ -1,3 +1,4 @@
+import 'checkout_bill_fixture.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,6 +47,7 @@ class _FakeOrdersRepository implements OrdersRepositoryInterface {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   }) async {
     placeOrderCalls++;
     if (failure != null) return Result.failure(failure!);
@@ -120,6 +122,7 @@ void main() {
   }) {
     final container = ProviderContainer(
       overrides: [
+        cartBillProvider.overrideWith((ref) async => checkoutBill),
         // Location resolves to null: the saved address is enough to order.
         currentLocationProvider.overrideWith((ref) async {
           // A real GPS fix takes time; geolocator allows up to 12 s.
@@ -146,6 +149,7 @@ void main() {
     final container = buildContainer(repository);
     addTearDown(container.dispose);
 
+    await container.read(cartBillProvider.future);
     final result = await container
         .read(checkoutViewModelProvider.notifier)
         .placeOrder(idempotencyKey: 'key-1', paymentMethod: 'cash');
@@ -164,6 +168,7 @@ void main() {
     final container = buildContainer(repository);
     addTearDown(container.dispose);
 
+    await container.read(cartBillProvider.future);
     final result = await container
         .read(checkoutViewModelProvider.notifier)
         .placeOrder(idempotencyKey: 'key-2', paymentMethod: 'cash');
@@ -182,6 +187,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
+    await container.read(cartBillProvider.future);
     final result = await container
         .read(checkoutViewModelProvider.notifier)
         .placeOrder(idempotencyKey: 'key-3', paymentMethod: 'cash');
@@ -202,6 +208,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
+    await container.read(cartBillProvider.future);
     final result = await container
         .read(checkoutViewModelProvider.notifier)
         .placeOrder(idempotencyKey: 'key-5', paymentMethod: 'cash');
@@ -216,6 +223,7 @@ void main() {
     final container = buildContainer(repository, seedCart: false);
     addTearDown(container.dispose);
 
+    await container.read(cartBillProvider.future);
     final result = await container
         .read(checkoutViewModelProvider.notifier)
         .placeOrder(idempotencyKey: 'key-4', paymentMethod: 'cash');

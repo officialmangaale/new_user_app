@@ -6,6 +6,8 @@ abstract class OrdersRepositoryInterface {
     required String restaurantId,
     required List<CartLine> lines,
     String? couponCode,
+    double? deliveryLatitude,
+    double? deliveryLongitude,
   });
 
   Future<Result<BillSummary>> validateGroceryCart({
@@ -37,6 +39,7 @@ abstract class OrdersRepositoryInterface {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   });
 
   Future<Result<PlacedOrder>> placeGroceryOrder({
@@ -51,9 +54,13 @@ abstract class OrdersRepositoryInterface {
     String? deliveryLandmark,
     String? paymentMethod,
     String? instructions,
+    double? expectedPayable,
   });
 
-  Future<Result<List<DeliveryOrder>>> fetchOrders({int page = 1, int limit = 20});
+  Future<Result<List<DeliveryOrder>>> fetchOrders({
+    int page = 1,
+    int limit = 20,
+  });
 
   Future<Result<List<DeliveryOrder>>> fetchActiveOrders();
 
@@ -63,5 +70,8 @@ abstract class OrdersRepositoryInterface {
 
   Future<Result<OrderTracking>> trackGroceryOrder(String orderId);
 
-  Future<Result<GroceryOrderPage>> fetchGroceryOrders({int page = 1, int limit = 10});
+  Future<Result<GroceryOrderPage>> fetchGroceryOrders({
+    int page = 1,
+    int limit = 10,
+  });
 }
