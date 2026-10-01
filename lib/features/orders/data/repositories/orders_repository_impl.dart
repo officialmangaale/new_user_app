@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/services/api_client.dart';
 import '../../../../core/services/api_exception.dart';
+import '../../../../core/storage/campaign_attribution_storage.dart';
 import '../../../../shared/models/app_models.dart';
 import '../../../../shared/repositories/json_readers.dart';
 import '../../../../core/error/result.dart';
@@ -17,9 +18,13 @@ import '../../domain/repositories/orders_repository_interface.dart';
 /// `/cart/validate` and the order responses return the authoritative billing
 /// summary and it is rendered verbatim.
 class OrdersRepositoryImpl implements OrdersRepositoryInterface {
-  const OrdersRepositoryImpl(this._client);
+  const OrdersRepositoryImpl(
+    this._client, [
+    this._attribution = const CampaignAttributionStorage(),
+  ]);
 
   final ApiClient _client;
+  final CampaignAttributionStorage _attribution;
 
   // ------------------------------------------------------------------
   // cart + checkout
@@ -139,6 +144,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     double? expectedPayable,
   }) async {
     try {
+      final campaignId = await _attribution.read();
       final response = await _client.restaurant.post<dynamic>(
         '/customer-web/orders',
         options: Options(headers: {'Idempotency-Key': idempotencyKey}),
@@ -162,8 +168,10 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           'payment_method': ?paymentMethod,
           'coupon_code': ?couponCode,
           'special_instructions': ?instructions,
+          'platform_campaign_id': ?campaignId,
         },
       );
+      if (campaignId != null) await _attribution.clear();
       final data = unwrapApiObject(response.data);
       return Result.success(
         PlacedOrder(
@@ -202,6 +210,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     double? expectedPayable,
   }) async {
     try {
+      final campaignId = await _attribution.read();
       final response = await _client.restaurant.post<dynamic>(
         '/customer-web/grocery/orders',
         options: Options(headers: {'Idempotency-Key': idempotencyKey}),
@@ -217,8 +226,10 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           'expected_payable': ?expectedPayable,
           'items': lines.map(_groceryLinePayload).toList(growable: false),
           'notes': ?instructions,
+          'platform_campaign_id': ?campaignId,
         },
       );
+      if (campaignId != null) await _attribution.clear();
       final data = unwrapApiObject(response.data);
       return Result.success(
         PlacedOrder(
@@ -305,6 +316,22 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       return Result.success(
         _order(raw is Map ? Map<String, dynamic>.from(raw) : {}),
       );
+    } on ApiException catch (error) {
+      return Result.failure(Failure.fromApiException(error));
+    }
+  }
+
+  /// POST /customer-web/orders/:id/cancel — only while the restaurant has not
+  /// accepted the order. A refusal comes back as a failure with the server's
+  /// plain-language reason.
+  @override
+  Future<Result<void>> cancelOrder(String orderId) async {
+    try {
+      await _post(
+        '/customer-web/orders/$orderId/cancel',
+        const <String, dynamic>{},
+      );
+      return Result.success(null);
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }

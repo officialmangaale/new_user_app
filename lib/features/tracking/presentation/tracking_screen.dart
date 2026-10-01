@@ -90,6 +90,62 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     });
   }
 
+  bool _cancelling = false;
+
+  /// A food order can be cancelled by the customer only while it is pending.
+  bool _canCancel(OrderTracking? live) =>
+      live != null && live.status.trim().toLowerCase() == 'pending';
+
+  Future<void> _confirmAndCancel() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: const Text(
+          'The restaurant has not accepted it yet, so you can cancel it now. '
+          'Once they accept, it can no longer be cancelled here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep order'),
+          ),
+          TextButton(
+            key: const ValueKey('confirm_cancel_order'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancelling = true);
+    final result = await ref
+        .read(cancelOrderUseCaseProvider)
+        .call(widget.orderId);
+    if (!mounted) return;
+    setState(() => _cancelling = false);
+
+    final messenger = ScaffoldMessenger.of(context);
+    result.when<void>(
+      success: (_) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Your order was cancelled.')),
+        );
+      },
+      failure: (failure) {
+        // e.g. the restaurant accepted it a moment ago: the server's own
+        // explanation is shown, and the screen below refreshes to the truth.
+        messenger.showSnackBar(SnackBar(content: Text(failure.message)));
+      },
+    );
+    // Either way, show what the backend now says and refresh the order list.
+    _refresh();
+    ref.invalidate(ordersProvider);
+    ref.invalidate(activeOrdersProvider);
+  }
+
   void _refresh() {
     _lastRefreshAt = DateTime.now();
     ref.invalidate(orderTrackingProvider(_request));
@@ -114,10 +170,15 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   Future<void> _connectSocket() async {
     final token = await ref.read(authStorageProvider).readToken();
     if (token == null || !mounted) return;
-    
-    final wsUrl = AppConfig.restaurantServiceWsBaseUrl.replaceFirst('http', 'ws');
-    final uri = Uri.parse('$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token');
-    
+
+    final wsUrl = AppConfig.restaurantServiceWsBaseUrl.replaceFirst(
+      'http',
+      'ws',
+    );
+    final uri = Uri.parse(
+      '$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token',
+    );
+
     _channel = WebSocketChannel.connect(uri);
     // Any event, whatever its payload, refetches the full snapshot: events
     // may carry only the new status, the snapshot carries the rider too.
@@ -204,17 +265,24 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ? '$riderName is handling your delivery'
         : 'Live tracking updates will appear here';
     return Scaffold(
-      body: Padding(padding: EdgeInsets.zero,
+      body: Padding(
+        padding: EdgeInsets.zero,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
               pinned: true,
               title: Text('Order #${widget.orderId}'),
               actions: [
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.help_outline_rounded),
-                ),
+                // Cancelling is offered only while the restaurant has not
+                // accepted the order; after that it is the restaurant's call
+                // and the control disappears rather than failing.
+                if (_canCancel(live))
+                  IconButton(
+                    key: const ValueKey('cancel_order_button'),
+                    tooltip: 'Cancel order',
+                    onPressed: _cancelling ? null : _confirmAndCancel,
+                    icon: const Icon(Icons.cancel_outlined),
+                  ),
               ],
             ),
             SliverToBoxAdapter(
@@ -228,7 +296,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                       // point to show. Otherwise the existing placeholder, so
                       // a missing key or missing coordinates never produces a
                       // blank or broken map.
-                      child: kGoogleMapsEnabled &&
+                      child:
+                          kGoogleMapsEnabled &&
                               live != null &&
                               (live.hasRiderLocation ||
                                   live.hasRestaurantLocation ||

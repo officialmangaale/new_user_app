@@ -68,6 +68,10 @@ abstract class OrdersRepositoryInterface {
 
   Future<Result<OrderTracking>> trackOrder(String orderId);
 
+  /// POST /customer-web/orders/:id/cancel. Allowed only while the restaurant has
+  /// not accepted the order; otherwise the failure carries the server's reason.
+  Future<Result<void>> cancelOrder(String orderId);
+
   Future<Result<OrderTracking>> trackGroceryOrder(String orderId);
 
   Future<Result<GroceryOrderPage>> fetchGroceryOrders({

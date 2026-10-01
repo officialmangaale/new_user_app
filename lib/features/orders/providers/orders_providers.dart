@@ -39,6 +39,10 @@ final trackOrderUseCaseProvider = Provider<TrackOrderUseCase>((ref) {
   return TrackOrderUseCase(ref.watch(ordersRepositoryProvider));
 });
 
+final cancelOrderUseCaseProvider = Provider<CancelOrderUseCase>((ref) {
+  return CancelOrderUseCase(ref.watch(ordersRepositoryProvider));
+});
+
 final fetchOrdersUseCaseProvider = Provider<FetchOrdersUseCase>((ref) {
   return FetchOrdersUseCase(ref.watch(ordersRepositoryProvider));
 });

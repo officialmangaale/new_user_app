@@ -186,3 +186,11 @@ class ValidateCouponUseCase {
     );
   }
 }
+
+/// Cancels a food order the restaurant has not accepted yet.
+class CancelOrderUseCase {
+  const CancelOrderUseCase(this._repository);
+  final OrdersRepositoryInterface _repository;
+
+  Future<Result<void>> call(String orderId) => _repository.cancelOrder(orderId);
+}
