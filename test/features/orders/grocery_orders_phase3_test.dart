@@ -272,10 +272,45 @@ void main() {
     expect(GroceryOrderPushTarget.fromData({'type': 'order_status_updated', 'orderId': '12'}), isNull);
     expect(GroceryOrderPushTarget.fromData({'action_type': 'openGroceryOrder', 'orderId': '../12'}), isNull);
 
-    final opened = <GroceryOrderPushTarget>[];
+    final opened = <PushOpenTarget>[];
     GroceryPushOpenBroker.instance.publishOpened({'action_type': 'openGroceryOrder', 'orderId': '12'});
     expect(opened, isEmpty);
     GroceryPushOpenBroker.instance.attach(opened.add);
-    expect(opened, [const GroceryOrderPushTarget('12')], reason: 'a cold-start tap waits for the app');
+    expect(
+      opened,
+      [const PushOpenTarget('/tracking/12?mode=grocery')],
+      reason: 'a cold-start tap waits for the app',
+    );
+  });
+
+  test('push taps route to food orders and products, and reject crafted ids', () {
+    PushOpenTarget? route(Map<String, dynamic> data) => PushOpenTarget.fromData(data);
+
+    // Restaurant order status push -> food tracking.
+    expect(
+      route({'type': 'order_status_updated', 'recipient_type': 'customer', 'orderId': '77', 'status': 'ready'}),
+      const PushOpenTarget('/tracking/77'),
+    );
+    // ...but never for a non-customer recipient or a bad id.
+    expect(route({'type': 'order_status_updated', 'recipient_type': 'restaurant', 'orderId': '77'}), isNull);
+    expect(route({'type': 'order_status_updated', 'recipient_type': 'customer', 'orderId': '7/../x'}), isNull);
+
+    // Promotional product push: grocery product by default, with attribution.
+    expect(
+      route({'action_type': 'openProduct', 'product_id': '345', 'campaign_id': '9'}),
+      const PushOpenTarget('/product/345', campaignId: 9),
+    );
+    expect(route({'type': 'promotion', 'productId': '345'}), const PushOpenTarget('/product/345'));
+    expect(
+      route({'action_type': 'openProduct', 'product_id': '12', 'item_type': 'food'}),
+      const PushOpenTarget('/food-item/12'),
+    );
+    // A non-numeric campaign id is dropped rather than injected into the route.
+    expect(
+      route({'action_type': 'openProduct', 'product_id': '345', 'campaign_id': 'x?y=1'}),
+      const PushOpenTarget('/product/345'),
+    );
+    expect(route({'action_type': 'openProduct', 'product_id': '../admin'}), isNull);
+    expect(route({'type': 'something_else', 'orderId': '5'}), isNull);
   });
 }
