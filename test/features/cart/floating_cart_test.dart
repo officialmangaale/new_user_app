@@ -121,7 +121,7 @@ void main() {
           addressesProvider.overrideWith((ref) async => []),
           cartBillProvider.overrideWith(
             (ref) async => BillSummary(
-              subtotal: ref.watch(cartTotalProvider),
+              subtotal: ref.watch(cartTotalProvider).toDouble(),
               discount: 0,
               deliveryFee: 20,
               packagingCharge: 0,

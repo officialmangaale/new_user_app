@@ -31,12 +31,19 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     required String restaurantId,
     required List<CartLine> lines,
     String? couponCode,
+    double? deliveryLatitude,
+    double? deliveryLongitude,
   }) async {
     try {
       final data = await _post('/customer-web/cart/validate', <String, dynamic>{
         'restaurant_id': _asIntOrString(restaurantId),
         'items': lines.map(_linePayload).toList(growable: false),
         'coupon_code': ?couponCode,
+        if (deliveryLatitude != null && deliveryLongitude != null)
+          'customer_location': {
+            'latitude': deliveryLatitude,
+            'longitude': deliveryLongitude,
+          },
       });
       return Result.success(_billSummaryFromJson(data));
     } on ApiException catch (error) {
@@ -78,30 +85,32 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     required int subtotal,
   }) async {
     try {
-      final data = await _post(
-        '/customer-web/coupons/validate',
-        <String, dynamic>{
-          'code': code,
-          'restaurant_id': _asIntOrString(restaurantId),
-          'order_amount': subtotal,
-        },
+      final data =
+          await _post('/customer-web/coupons/validate', <String, dynamic>{
+            'code': code,
+            'restaurant_id': _asIntOrString(restaurantId),
+            'order_amount': subtotal,
+          });
+      return Result.success(
+        CouponResult(
+          valid: data['valid'] != false,
+          code: readString(data, const ['code']),
+          discountAmount: readDouble(data, const [
+            'discount_amount',
+            'discount',
+          ]).round(),
+          message: readString(data, const ['message']),
+        ),
       );
-      return Result.success(CouponResult(
-        valid: data['valid'] != false,
-        code: readString(data, const ['code']),
-        discountAmount: readDouble(data, const [
-          'discount_amount',
-          'discount',
-        ]).round(),
-        message: readString(data, const ['message']),
-      ));
     } on ApiException catch (error) {
-      return Result.success(CouponResult(
-        valid: false,
-        code: code,
-        discountAmount: 0,
-        message: error.message,
-      ));
+      return Result.success(
+        CouponResult(
+          valid: false,
+          code: code,
+          discountAmount: 0,
+          message: error.message,
+        ),
+      );
     }
   }
 
@@ -127,6 +136,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     String? paymentMethod,
     String? couponCode,
     String? instructions,
+    double? expectedPayable,
   }) async {
     try {
       final response = await _client.restaurant.post<dynamic>(
@@ -147,6 +157,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
             'latitude': deliveryLatitude,
             'longitude': deliveryLongitude,
           },
+          'expected_payable': ?expectedPayable,
           'items': lines.map(_linePayload).toList(growable: false),
           'payment_method': ?paymentMethod,
           'coupon_code': ?couponCode,
@@ -154,12 +165,17 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         },
       );
       final data = unwrapApiObject(response.data);
-      return Result.success(PlacedOrder(
-        orderId: readString(data, const ['id', 'order_id']),
-        orderNumber: readString(data, const ['order_number', 'display_number']),
-        status: readString(data, const ['order_status', 'status']),
-        bill: _billSummaryFromJson(data),
-      ));
+      return Result.success(
+        PlacedOrder(
+          orderId: readString(data, const ['id', 'order_id']),
+          orderNumber: readString(data, const [
+            'order_number',
+            'display_number',
+          ]),
+          status: readString(data, const ['order_status', 'status']),
+          bill: _billSummaryFromJson(data),
+        ),
+      );
     } on DioException catch (error) {
       return Result.failure(
         Failure.fromApiException(ApiException.fromDioException(error)),
@@ -183,6 +199,7 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     String? deliveryLandmark,
     String? paymentMethod,
     String? instructions,
+    double? expectedPayable,
   }) async {
     try {
       final response = await _client.restaurant.post<dynamic>(
@@ -197,21 +214,28 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           'delivery_landmark': ?deliveryLandmark,
           'delivery_latitude': deliveryLatitude,
           'delivery_longitude': deliveryLongitude,
+          'expected_payable': ?expectedPayable,
           'items': lines.map(_groceryLinePayload).toList(growable: false),
           'notes': ?instructions,
         },
       );
       final data = unwrapApiObject(response.data);
-      return Result.success(PlacedOrder(
-        orderId: readString(data, const ['grocery_order_id', 'id', 'order_id']),
-        orderNumber: readString(data, const [
-          'order_number',
-          'display_number',
-          'grocery_order_id',
-        ]),
-        status: readString(data, const ['order_status', 'status']),
-        bill: _billSummaryFromJson(data),
-      ));
+      return Result.success(
+        PlacedOrder(
+          orderId: readString(data, const [
+            'grocery_order_id',
+            'id',
+            'order_id',
+          ]),
+          orderNumber: readString(data, const [
+            'order_number',
+            'display_number',
+            'grocery_order_id',
+          ]),
+          status: readString(data, const ['order_status', 'status']),
+          bill: _billSummaryFromJson(data),
+        ),
+      );
     } on DioException catch (error) {
       return Result.failure(
         Failure.fromApiException(ApiException.fromDioException(error)),
@@ -237,15 +261,21 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
 
   /// GET /customer-web/orders — order history.
   @override
-  Future<Result<List<DeliveryOrder>>> fetchOrders({int page = 1, int limit = 20}) async {
+  Future<Result<List<DeliveryOrder>>> fetchOrders({
+    int page = 1,
+    int limit = 20,
+  }) async {
     try {
       final raw = await _get(
         '/customer-web/orders',
         query: <String, dynamic>{'page': page, 'limit': limit},
       );
-      return Result.success(listFrom(raw, keys: const ['orders', 'items', 'results'])
-          .map(_order)
-          .toList(growable: false));
+      return Result.success(
+        listFrom(
+          raw,
+          keys: const ['orders', 'items', 'results'],
+        ).map(_order).toList(growable: false),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -256,9 +286,12 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   Future<Result<List<DeliveryOrder>>> fetchActiveOrders() async {
     try {
       final raw = await _get('/customer-web/orders/active');
-      return Result.success(listFrom(raw, keys: const ['orders', 'items', 'results'])
-          .map(_order)
-          .toList(growable: false));
+      return Result.success(
+        listFrom(
+          raw,
+          keys: const ['orders', 'items', 'results'],
+        ).map(_order).toList(growable: false),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -269,7 +302,9 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   Future<Result<DeliveryOrder>> fetchOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/orders/$orderId');
-      return Result.success(_order(raw is Map ? Map<String, dynamic>.from(raw) : {}));
+      return Result.success(
+        _order(raw is Map ? Map<String, dynamic>.from(raw) : {}),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -280,67 +315,79 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   Future<Result<OrderTracking>> trackOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/orders/$orderId/track');
-      final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final data = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
       final order = data['order'];
       final source = order is Map ? Map<String, dynamic>.from(order) : data;
       final rider = data['rider'];
-      final riderSource =
-          rider is Map ? Map<String, dynamic>.from(rider) : <String, dynamic>{};
+      final riderSource = rider is Map
+          ? Map<String, dynamic>.from(rider)
+          : <String, dynamic>{};
       final restaurant = data['restaurant'];
       final restaurantSource = restaurant is Map
           ? Map<String, dynamic>.from(restaurant)
           : <String, dynamic>{};
       final address = data['delivery_address'];
-      final addressSource =
-          address is Map ? Map<String, dynamic>.from(address) : <String, dynamic>{};
+      final addressSource = address is Map
+          ? Map<String, dynamic>.from(address)
+          : <String, dynamic>{};
       final riderName = readString(source, const [
         'rider_name',
         'delivery_partner',
       ]);
       final riderPhone = readString(source, const ['rider_phone']);
-      return Result.success(OrderTracking(
-        orderId: readString(source, const ['id', 'order_id']),
-        status: readString(source, const ['order_status', 'status']),
-        deliveryStatus: readString(source, const ['delivery_status']),
-        statusLabel: readString(source, const [
-          'status_message',
-          'status_label',
-          'label',
-        ]),
-        etaMinutes: readInt(source, const [
-          'eta_minutes',
-          'estimated_minutes',
-          'estimated_delivery_minutes',
-        ]),
-        riderName: riderName.isNotEmpty
-            ? riderName
-            : readString(riderSource, const ['name', 'rider_name']),
-        riderPhone: riderPhone.isNotEmpty
-            ? riderPhone
-            : readString(riderSource, const ['phone', 'rider_phone']),
-        // Present only once a rider is assigned; absent on older deployments
-        // that do not yet send them, hence the null-safe reads.
-        riderLatitude: _optionalDouble(riderSource, const [
-          'latitude',
-          'rider_latitude',
-        ]),
-        riderLongitude: _optionalDouble(riderSource, const [
-          'longitude',
-          'rider_longitude',
-        ]),
-        riderMapsUrl: readString(riderSource, const ['maps_url']),
-        riderLocationUpdatedAt: DateTime.tryParse(
-          readString(riderSource, const ['location_updated_at']),
-        )?.toUtc(),
-        // Pickup and drop-off for the live map. Both are additive on the
-        // backend, so an older deployment simply leaves them null and the
-        // map shows what it has.
-        restaurantName: readString(restaurantSource, const ['name']),
-        restaurantLatitude: _optionalDouble(restaurantSource, const ['latitude']),
-        restaurantLongitude: _optionalDouble(restaurantSource, const ['longitude']),
-        deliveryLatitude: _optionalDouble(addressSource, const ['latitude']),
-        deliveryLongitude: _optionalDouble(addressSource, const ['longitude']),
-      ));
+      return Result.success(
+        OrderTracking(
+          orderId: readString(source, const ['id', 'order_id']),
+          status: readString(source, const ['order_status', 'status']),
+          deliveryStatus: readString(source, const ['delivery_status']),
+          statusLabel: readString(source, const [
+            'status_message',
+            'status_label',
+            'label',
+          ]),
+          etaMinutes: readInt(source, const [
+            'eta_minutes',
+            'estimated_minutes',
+            'estimated_delivery_minutes',
+          ]),
+          riderName: riderName.isNotEmpty
+              ? riderName
+              : readString(riderSource, const ['name', 'rider_name']),
+          riderPhone: riderPhone.isNotEmpty
+              ? riderPhone
+              : readString(riderSource, const ['phone', 'rider_phone']),
+          // Present only once a rider is assigned; absent on older deployments
+          // that do not yet send them, hence the null-safe reads.
+          riderLatitude: _optionalDouble(riderSource, const [
+            'latitude',
+            'rider_latitude',
+          ]),
+          riderLongitude: _optionalDouble(riderSource, const [
+            'longitude',
+            'rider_longitude',
+          ]),
+          riderMapsUrl: readString(riderSource, const ['maps_url']),
+          riderLocationUpdatedAt: DateTime.tryParse(
+            readString(riderSource, const ['location_updated_at']),
+          )?.toUtc(),
+          // Pickup and drop-off for the live map. Both are additive on the
+          // backend, so an older deployment simply leaves them null and the
+          // map shows what it has.
+          restaurantName: readString(restaurantSource, const ['name']),
+          restaurantLatitude: _optionalDouble(restaurantSource, const [
+            'latitude',
+          ]),
+          restaurantLongitude: _optionalDouble(restaurantSource, const [
+            'longitude',
+          ]),
+          deliveryLatitude: _optionalDouble(addressSource, const ['latitude']),
+          deliveryLongitude: _optionalDouble(addressSource, const [
+            'longitude',
+          ]),
+        ),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -365,31 +412,39 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
   Future<Result<OrderTracking>> trackGroceryOrder(String orderId) async {
     try {
       final raw = await _get('/customer-web/grocery/orders/$orderId/track');
-      final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final data = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
       final merchant = data['merchant'];
       final orderType = readString(data, const ['order_type']);
-      return Result.success(OrderTracking(
-        orderId: readString(data, const ['grocery_order_id', 'id', 'order_id']),
-        status: readString(data, const ['order_status', 'status']),
-        statusLabel: readString(data, const [
-          'status_message',
-          'status_label',
-          'label',
-        ]),
-        etaMinutes: readInt(data, const [
-          'eta_minutes',
-          'estimated_minutes',
-          'estimated_delivery_minutes',
-        ]),
-        riderName: readString(data, const ['rider_name', 'delivery_partner']),
-        riderPhone: readString(data, const ['rider_phone']),
-        restaurantName: merchant is Map
-            ? readString(Map<String, dynamic>.from(merchant), const ['name'])
-            : '',
-        orderType: orderType.isEmpty ? 'grocery' : orderType,
-        statusReason: readString(data, const ['status_reason']),
-        timeline: _trackingTimeline(data['timeline']),
-      ));
+      return Result.success(
+        OrderTracking(
+          orderId: readString(data, const [
+            'grocery_order_id',
+            'id',
+            'order_id',
+          ]),
+          status: readString(data, const ['order_status', 'status']),
+          statusLabel: readString(data, const [
+            'status_message',
+            'status_label',
+            'label',
+          ]),
+          etaMinutes: readInt(data, const [
+            'eta_minutes',
+            'estimated_minutes',
+            'estimated_delivery_minutes',
+          ]),
+          riderName: readString(data, const ['rider_name', 'delivery_partner']),
+          riderPhone: readString(data, const ['rider_phone']),
+          restaurantName: merchant is Map
+              ? readString(Map<String, dynamic>.from(merchant), const ['name'])
+              : '',
+          orderType: orderType.isEmpty ? 'grocery' : orderType,
+          statusReason: readString(data, const ['status_reason']),
+          timeline: _trackingTimeline(data['timeline']),
+        ),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -409,12 +464,15 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
         query: <String, dynamic>{'page': page, 'limit': limit},
       );
       final pagination = raw is Map ? raw['pagination'] : null;
-      return Result.success(GroceryOrderPage(
-        orders: listFrom(raw, keys: const ['orders'])
-            .map(_groceryOrderSummary)
-            .toList(growable: false),
-        hasMore: pagination is Map && pagination['has_more'] == true,
-      ));
+      return Result.success(
+        GroceryOrderPage(
+          orders: listFrom(
+            raw,
+            keys: const ['orders'],
+          ).map(_groceryOrderSummary).toList(growable: false),
+          hasMore: pagination is Map && pagination['has_more'] == true,
+        ),
+      );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
@@ -424,7 +482,10 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       GroceryOrderSummary(
         id: readString(json, const ['grocery_order_id', 'id']),
         merchantName: readString(json, const ['merchant_name']),
-        status: readString(json, const ['order_status', 'status']).toLowerCase(),
+        status: readString(json, const [
+          'order_status',
+          'status',
+        ]).toLowerCase(),
         statusLabel: readString(json, const ['status_message']),
         total: readDouble(json, const ['grand_total']),
         itemCount: readInt(json, const ['item_count']),
@@ -513,8 +574,9 @@ List<TrackingTimelineEntry> _trackingTimeline(Object? raw) {
     for (final entry in raw)
       if (entry is Map)
         TrackingTimelineEntry(
-          status: readString(Map<String, dynamic>.from(entry), const ['status'])
-              .toLowerCase(),
+          status: readString(Map<String, dynamic>.from(entry), const [
+            'status',
+          ]).toLowerCase(),
           label: readString(Map<String, dynamic>.from(entry), const ['label']),
           at: DateTime.tryParse(
             readString(Map<String, dynamic>.from(entry), const ['timestamp']),
@@ -524,46 +586,107 @@ List<TrackingTimelineEntry> _trackingTimeline(Object? raw) {
 }
 
 BillSummary _billSummaryFromJson(Map<String, dynamic> json) {
-  // Some endpoints nest the money under `billing`/`summary`.
-  final nested = json['billing'] ?? json['summary'] ?? json['bill'];
+  final nested =
+      json['customer_bill'] ??
+      json['billing'] ??
+      json['summary'] ??
+      json['bill'] ??
+      json['bill_breakdown'];
   final source = nested is Map
       ? <String, dynamic>{...json, ...Map<String, dynamic>.from(nested)}
       : json;
+  const totalKeys = [
+    'grand_total',
+    'total_amount',
+    'rounded_total_amount',
+    'payable_amount',
+  ];
+  final totalRaw = totalKeys
+      .map((key) => source[key])
+      .where((v) => v != null)
+      .firstOrNull;
+  final total = totalRaw is num
+      ? totalRaw.toDouble()
+      : double.tryParse('$totalRaw') ?? double.nan;
+  final items = source['items'];
+  final fees = source['fees'];
   return BillSummary(
-    subtotal: readDouble(source, const ['subtotal', 'item_total']).round(),
+    subtotal: readDouble(source, const [
+      'subtotal',
+      'items_subtotal',
+      'item_total',
+    ]),
     discount: readDouble(source, const [
+      'coupon_discount',
       'discount_amount',
       'discount',
-    ]).round(),
-    deliveryFee: readDouble(source, const [
-      'delivery_fee',
-      'delivery_charge',
-    ]).round(),
+    ]),
+    deliveryFee: readDouble(source, const ['delivery_fee', 'delivery_charge']),
     packagingCharge: readDouble(source, const [
-      'extra_charges',
+      'packaging_fee',
       'packaging_charge',
-    ]).round(),
+    ]),
+    additionalCharges: readDouble(source, const [
+      'additional_charges',
+      'extra_charges',
+    ]),
+    offerDiscount: readDouble(
+      source,
+      json['customer_bill'] is Map
+          ? const ['discount_amount']
+          : const ['offer_discount_amount'],
+    ),
+    tipAmount: readDouble(source, const ['tip_amount']),
     cgst: readDouble(source, const ['cgst', 'cgst_amount']),
     sgst: readDouble(source, const ['sgst', 'sgst_amount']),
     taxAmount: readDouble(source, const ['tax_amount', 'taxes']),
     platformFee: readDouble(source, const [
-      'platform_fee_amount',
       'platform_fee',
-    ]).round(),
+      'platform_fee_amount',
+    ]),
     roundOff: readDouble(source, const ['round_off_amount', 'round_off']),
-    grandTotal: readDouble(source, const [
-      'grand_total',
-      'total_amount',
-      'rounded_total_amount',
-      'payable_amount',
-    ]).round(),
-    // `/customer-web/cart/validate` reports this as `is_valid`; reading only
-    // `valid` meant an invalid cart still came back marked valid.
-    valid: readBool(source, const [
-      'is_valid',
-      'valid',
-    ], orElse: true),
-    message: readString(source, const ['message']),
+    grandTotal: total.isFinite ? total : 0,
+    valid:
+        total.isFinite &&
+        total >= 0 &&
+        readBool(json, const ['is_valid', 'valid'], orElse: true),
+    message: readString(json, const ['message']),
+    items: items is List
+        ? items
+              .whereType<Map>()
+              .map((raw) {
+                final item = Map<String, dynamic>.from(raw);
+                return BillItem(
+                  itemId: readString(item, const [
+                    'item_id',
+                    'grocery_product_id',
+                  ]),
+                  quantity: readInt(item, const ['quantity']),
+                  sellingPrice: readDouble(item, const [
+                    'selling_price',
+                    'unit_price',
+                  ]),
+                  originalPrice: item['original_price'] == null
+                      ? null
+                      : readDouble(item, const ['original_price']),
+                  discount: readDouble(item, const ['discount']),
+                  lineTotal: readDouble(item, const ['line_total']),
+                );
+              })
+              .toList(growable: false)
+        : const [],
+    fees: fees is List
+        ? fees
+              .whereType<Map>()
+              .map((raw) {
+                final fee = Map<String, dynamic>.from(raw);
+                return BillFee(
+                  readString(fee, const ['title']),
+                  readDouble(fee, const ['amount']),
+                );
+              })
+              .toList(growable: false)
+        : const [],
   );
 }
 

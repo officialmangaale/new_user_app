@@ -36,11 +36,18 @@ class CheckoutViewModel extends AsyncNotifier<void> {
   }) async {
     final cartState = ref.read(cartControllerProvider);
     final lines = ref.read(cartLinesProvider);
-
     if (lines.isEmpty) {
-      final failure = const ValidationFailure('Your cart is empty.');
-      state = AsyncValue.error(failure, StackTrace.current);
-      return Result.failure(failure);
+      return Result.failure(const ValidationFailure('Your cart is empty.'));
+    }
+    final couponCode = ref.read(cartCouponProvider);
+    final quote = ref.read(cartBillProvider);
+    final bill = !quote.isLoading && !quote.hasError ? quote.value : null;
+    if (bill == null || !bill.valid) {
+      return Result.failure(
+        const ValidationFailure(
+          'Wait for a valid price before placing your order.',
+        ),
+      );
     }
 
     if (lines.first.item.type == CatalogItemType.grocery) {
@@ -50,6 +57,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
         idempotencyKey: idempotencyKey,
         paymentMethod: paymentMethod,
         instructions: instructions,
+        expectedPayable: bill.grandTotal,
       );
     }
 
@@ -95,6 +103,14 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(delivery.failure!);
     }
     final deliveryAddress = delivery.address!;
+    if (!identical(cartState, ref.read(cartControllerProvider)) ||
+        couponCode != ref.read(cartCouponProvider) ||
+        ref.read(cartBillProvider).isLoading ||
+        ref.read(cartBillProvider).hasError) {
+      return Result.failure(
+        const ValidationFailure('Your cart changed. Review the updated bill.'),
+      );
+    }
 
     final result = await ref.read(placeOrderUseCaseProvider)(
       restaurantId: cartState.cartRestaurantId,
@@ -111,6 +127,8 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       deliveryLandmark: _nonEmpty(deliveryAddress.landmark),
       paymentMethod: paymentMethod,
       instructions: instructions,
+      expectedPayable: bill.grandTotal,
+      couponCode: couponCode.isEmpty ? null : couponCode,
     );
 
     return result.when(
@@ -133,6 +151,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
     required String idempotencyKey,
     required String paymentMethod,
     String? instructions,
+    required double expectedPayable,
   }) async {
     final merchantId = cartState.cartGroceryMerchantId.isNotEmpty
         ? cartState.cartGroceryMerchantId
@@ -156,6 +175,11 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(delivery.failure!);
     }
     final deliveryAddress = delivery.address!;
+    if (!identical(cartState, ref.read(cartControllerProvider))) {
+      return Result.failure(
+        const ValidationFailure('Your cart changed. Review the updated bill.'),
+      );
+    }
 
     final storedPhone = await ref.read(authStorageProvider).readUserPhone();
     final customerPhone = _firstNonEmpty([profile?.phone, storedPhone]);
@@ -174,6 +198,7 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       customerName: _firstNonEmpty([profile?.name]),
       customerPhone: customerPhone,
       deliveryAddress: deliveryAddress.singleLine,
+      expectedPayable: expectedPayable,
       deliveryLatitude: delivery.latitude!,
       deliveryLongitude: delivery.longitude!,
       deliveryLandmark: _nonEmpty(deliveryAddress.landmark),

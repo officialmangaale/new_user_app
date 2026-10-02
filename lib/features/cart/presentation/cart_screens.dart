@@ -6,6 +6,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 
 import '../../../core/widgets/app_ui.dart';
+import '../../../core/error/failures.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../account/address/address_form_sheet.dart';
@@ -54,18 +55,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       );
     }
     final grocery = lines.first.item.type == CatalogItemType.grocery;
-    final total = ref.watch(cartTotalProvider);
 
-    // Every figure below comes from /customer-web/cart/validate. The app must
-    // not invent tax, delivery or packaging amounts — the customer has to see
-    // exactly what the backend will charge.
-    final bill = ref.watch(cartBillProvider).value;
-    final taxes = (bill?.taxAmount ?? 0).round();
-    final platformFee = bill?.platformFee ?? 0;
-    final packagingFee = bill?.packagingCharge ?? 0;
-    final deliveryFee = bill?.deliveryFee ?? 0;
-    final couponDiscount = bill?.discount ?? 0;
-    final payable = bill?.grandTotal ?? total;
+    final quote = ref.watch(cartBillProvider);
+    final bill = !quote.isLoading && !quote.hasError ? quote.value : null;
+    final payable = bill?.valid == true
+        ? '₹${formatMoney(bill!.grandTotal)}'
+        : 'Price unavailable';
     return Scaffold(
       appBar: AppBar(
         leading: widget.onClose == null
@@ -112,9 +107,22 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     ],
                   ),
                   const Divider(height: 28),
-                  for (final line in lines) ...[
-                    _CartLineTile(line: line),
-                    if (line != lines.last) const Divider(height: 24),
+                  for (var i = 0; i < lines.length; i++) ...[
+                    _CartLineTile(
+                      line: lines[i],
+                      price: grocery
+                          ? bill?.items
+                                .where(
+                                  (item) => item.itemId == lines[i].item.id,
+                                )
+                                .firstOrNull
+                          : bill != null &&
+                                bill.items.length == lines.length &&
+                                bill.items[i].itemId == lines[i].item.id
+                          ? bill.items[i]
+                          : null,
+                    ),
+                    if (i != lines.length - 1) const Divider(height: 24),
                   ],
                 ],
               ),
@@ -137,15 +145,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           const SizedBox(height: AppSpacing.md),
           _AddressCard(),
           const SizedBox(height: AppSpacing.lg),
-          _BillDetails(
-            total: total,
-            taxes: taxes,
-            platformFee: platformFee,
-            packagingFee: packagingFee,
-            deliveryFee: deliveryFee,
-            couponDiscount: couponDiscount,
-            payable: payable,
-          ),
+          if (!grocery) const _CouponEntry(),
+          const _BillDetails(),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -168,7 +169,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '₹$payable',
+                      payable,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     Text(
@@ -183,17 +184,19 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   label: widget.onClose == null
                       ? 'Proceed to checkout'
                       : 'Checkout',
-                  onPressed: () {
-                    final authenticated = ref
-                        .read(appControllerProvider)
-                        .authenticated;
-                    final route = _checkoutRoute(_instructions.text);
-                    if (authenticated) {
-                      context.push(route);
-                    } else {
-                      ProtectedActionSheet.show(context, route);
-                    }
-                  },
+                  onPressed: bill?.valid != true
+                      ? null
+                      : () {
+                          final authenticated = ref
+                              .read(appControllerProvider)
+                              .authenticated;
+                          final route = _checkoutRoute(_instructions.text);
+                          if (authenticated) {
+                            context.push(route);
+                          } else {
+                            ProtectedActionSheet.show(context, route);
+                          }
+                        },
                 ),
               ),
             ],
@@ -211,9 +214,10 @@ String _checkoutRoute(String instructions) {
 }
 
 class _CartLineTile extends ConsumerWidget {
-  const _CartLineTile({required this.line});
+  const _CartLineTile({required this.line, this.price});
 
   final CartLine line;
+  final BillItem? price;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,9 +253,23 @@ class _CartLineTile extends ConsumerWidget {
                 const SizedBox(height: 3),
               ],
               Text(
-                '₹${line.selection.unitPrice} each',
+                price == null
+                    ? 'Updating price…'
+                    : '₹${formatMoney(price!.sellingPrice)} each',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (price?.originalPrice != null)
+                Text(
+                  '₹${formatMoney(price!.originalPrice!)}',
+                  style: const TextStyle(
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+              if ((price?.discount ?? 0) > 0)
+                Text(
+                  'Save ₹${formatMoney(price!.discount)} each',
+                  style: const TextStyle(color: AppColors.success),
+                ),
             ],
           ),
         ),
@@ -271,7 +289,7 @@ class _CartLineTile extends ConsumerWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              '₹${line.total}',
+              price == null ? '—' : '₹${formatMoney(price!.lineTotal)}',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             SizedBox(
@@ -379,27 +397,39 @@ String _addressTitle(CustomerAddress address) {
   return label.isEmpty ? 'Deliver to saved address' : 'Deliver to $label';
 }
 
-class _BillDetails extends StatelessWidget {
-  const _BillDetails({
-    required this.total,
-    required this.taxes,
-    required this.platformFee,
-    required this.packagingFee,
-    required this.deliveryFee,
-    required this.couponDiscount,
-    required this.payable,
-  });
-
-  final int total;
-  final int taxes;
-  final int platformFee;
-  final int packagingFee;
-  final int deliveryFee;
-  final int couponDiscount;
-  final int payable;
-
+class _BillDetails extends ConsumerWidget {
+  const _BillDetails();
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quote = ref.watch(cartBillProvider);
+    if (quote.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Updating prices…'),
+      );
+    }
+    final bill = quote.hasError ? null : quote.value;
+    if (bill == null || !bill.valid) {
+      return Card(
+        child: Column(
+          children: [
+            Text(
+              bill?.message.isNotEmpty == true
+                  ? bill!.message
+                  : quote.error is Failure
+                  ? (quote.error as Failure).message
+                  : quote.error is StateError
+                  ? (quote.error as StateError).message.toString()
+                  : 'Unable to confirm prices. Check your address and try again.',
+            ),
+            TextButton(
+              onPressed: () => ref.invalidate(cartBillProvider),
+              child: const Text('Retry pricing'),
+            ),
+          ],
+        ),
+      );
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -411,67 +441,76 @@ class _BillDetails extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 14),
-            _row('Item total', '₹$total'),
-            _row('Taxes', '₹$taxes'),
-            _row('Platform fee', '₹$platformFee'),
-            _row('Packaging fee', '₹$packagingFee'),
-            _row('Delivery fee', '₹$deliveryFee'),
-            if (couponDiscount > 0)
-              _row(
-                'Coupon discount',
-                '−₹$couponDiscount',
-                valueColor: AppColors.success,
-              ),
-            const Divider(height: 24),
-            _row('To pay', '₹$payable', bold: true),
-            if (couponDiscount > 0) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.successLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'You save ₹$couponDiscount with this order',
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+            _row('Item total', bill.subtotal),
+            if (bill.offerDiscount > 0)
+              _row('Discount', bill.offerDiscount, discount: true),
+            _row('Delivery charge', bill.deliveryFee),
+            _row('Platform fee', bill.platformFee),
+            _row('Packaging', bill.packagingCharge),
+            _row('Additional charges', bill.additionalCharges),
+            for (final fee in bill.fees) _row(fee.title, fee.amount),
+            _row('Coupon discount', bill.discount, discount: bill.discount > 0),
+            _row('Taxes', bill.taxAmount),
+            if (bill.tipAmount > 0) _row('Tip', bill.tipAmount),
+            if (bill.roundOff != 0) _row('Round off', bill.roundOff),
+            const Divider(),
+            _row('To pay', bill.grandTotal),
           ],
         ),
       ),
     );
   }
 
-  Widget _row(
-    String label,
-    String value, {
-    Color? valueColor,
-    bool bold = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
+  Widget _row(String title, double amount, {bool discount = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        Expanded(child: Text(title)),
+        Text('${discount ? '−' : ''}₹${formatMoney(amount)}'),
+      ],
+    ),
+  );
+}
+
+class _CouponEntry extends ConsumerStatefulWidget {
+  const _CouponEntry();
+  @override
+  ConsumerState<_CouponEntry> createState() => _CouponEntryState();
+}
+
+class _CouponEntryState extends ConsumerState<_CouponEntry> {
+  final controller = TextEditingController();
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final applied = ref.watch(cartCouponProvider);
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Coupon code'),
           ),
-          Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.w700, color: valueColor),
+        ),
+        TextButton(
+          onPressed: () =>
+              ref.read(cartCouponProvider.notifier).setCode(controller.text),
+          child: const Text('Apply'),
+        ),
+        if (applied.isNotEmpty)
+          TextButton(
+            onPressed: () {
+              controller.clear();
+              ref.read(cartCouponProvider.notifier).setCode('');
+            },
+            child: const Text('Remove'),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -505,6 +544,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // land twice before the frame renders. The idempotency key would make the
     // second order a no-op server-side; this stops it leaving the device.
     if (_paying) return;
+    final quote = ref.read(cartBillProvider);
+    if (quote.isLoading || quote.hasError || quote.value?.valid != true) return;
 
     final lines = ref.read(cartLinesProvider);
     if (lines.isEmpty) {
@@ -534,7 +575,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 : '/tracking/${placed.orderId}',
           );
         },
-        failure: (failure) => _showError(failure.message),
+        failure: (failure) {
+          _showError(failure.message);
+          ref.invalidate(cartBillProvider);
+        },
       );
     } catch (error, stackTrace) {
       // Nothing below the ViewModel is allowed to fail silently. Anything that
@@ -562,12 +606,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // Nothing on this screen computes money — the button must show exactly what
     // the backend will charge.
     final bill = ref.watch(cartBillProvider);
-    final payable = bill.value?.grandTotal ?? 0;
+    final ready =
+        !bill.isLoading && !bill.hasError && bill.value?.valid == true;
+    final payable = ready ? formatMoney(bill.value!.grandTotal) : null;
     return Scaffold(
       appBar: AppBar(title: const Text('Payment')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          const _AddressCard(),
+          const _BillDetails(),
           Text(
             'Select payment method',
             style: Theme.of(context).textTheme.titleLarge,
@@ -618,9 +666,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: AppButton(
-            label: 'Pay ₹$payable with $_method',
+            label: ready
+                ? 'Pay ₹$payable with $_method'
+                : 'Waiting for confirmed prices',
             loading: _paying,
-            onPressed: _paying ? null : _placeOrder,
+            onPressed: _paying || !ready ? null : _placeOrder,
           ),
         ),
       ),
