@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/maps/map_capabilities.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../authentication/providers/auth_providers.dart';
@@ -48,6 +50,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   Timer? _pollTimer;
   bool _appInForeground = true;
   String _lastStatus = '';
+  bool _socketHealthy = false;
+  StreamSubscription<dynamic>? _socketSubscription;
+  Timer? _reconnectTimer;
+  OrderTracking? _liveOverride;
 
   /// While no rider is assigned yet the poll runs faster
   /// (tracking_refresh_policy.dart).
@@ -82,8 +88,15 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       if (!isTrackingRefreshDue(
         lastRefreshAt: _lastRefreshAt,
         now: DateTime.now(),
-        awaitingRider: _awaitingRider,
+        awaitingRider: _awaitingRider || !_socketHealthy,
       )) {
+        return;
+      }
+      if (_socketHealthy &&
+          !_awaitingRider &&
+          _lastRefreshAt != null &&
+          DateTime.now().difference(_lastRefreshAt!) <
+              const Duration(seconds: 60)) {
         return;
       }
       _refresh();
@@ -107,34 +120,117 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
       // Returning from the background, the position may be minutes old.
       // Refresh now rather than waiting out the rest of the interval.
       _refresh();
+      if (widget.mode != DeliveryMode.grocery && _channel == null) {
+        _connectSocket();
+      }
       _startPolling();
     }
   }
 
   Future<void> _connectSocket() async {
+    _reconnectTimer?.cancel();
+    _socketSubscription?.cancel();
+    _channel?.sink.close();
     final token = await ref.read(authStorageProvider).readToken();
     if (token == null || !mounted) return;
-    
-    final wsUrl = AppConfig.restaurantServiceWsBaseUrl.replaceFirst('http', 'ws');
-    final uri = Uri.parse('$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token');
-    
+
+    final wsUrl = AppConfig.restaurantServiceWsBaseUrl.replaceFirst(
+      'http',
+      'ws',
+    );
+    final uri = Uri.parse(
+      '$wsUrl/ws/orders/status?order_id=${widget.orderId}&token=$token',
+    );
+
     _channel = WebSocketChannel.connect(uri);
-    // Any event, whatever its payload, refetches the full snapshot: events
-    // may carry only the new status, the snapshot carries the rider too.
-    _channel?.stream.listen(
-      (_) {
-        if (mounted) _refresh();
+    _socketHealthy = true;
+    _refresh();
+    _socketSubscription = _channel?.stream.listen(
+      (message) {
+        if (!mounted) return;
+        if (!_applySocketDelta(message)) _refresh();
       },
       onError: (_) {
-        if (mounted) _refresh();
+        _socketHealthy = false;
+        if (mounted) {
+          _refresh();
+          _scheduleReconnect();
+        }
+      },
+      onDone: () {
+        _socketHealthy = false;
+        if (mounted && !isTerminalTrackingStatus(_lastStatus)) {
+          _scheduleReconnect();
+        }
       },
     );
+  }
+
+  void _scheduleReconnect() {
+    if (widget.mode == DeliveryMode.grocery || _reconnectTimer != null) return;
+    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+      _reconnectTimer = null;
+      if (mounted && !isTerminalTrackingStatus(_lastStatus)) _connectSocket();
+    });
+  }
+
+  bool _applySocketDelta(dynamic message) {
+    Map<String, dynamic>? event;
+    try {
+      if (message is String) {
+        final decoded = jsonDecode(message);
+        if (decoded is Map) event = Map<String, dynamic>.from(decoded);
+      } else if (message is Map) {
+        event = Map<String, dynamic>.from(message);
+      }
+    } catch (_) {
+      return false;
+    }
+    if (event == null) return false;
+    final type = '${event['type'] ?? event['event']}'.toUpperCase();
+    if (type != 'RIDER_LOCATION_UPDATED') return false;
+    final data = event['data'] is Map
+        ? Map<String, dynamic>.from(event['data'] as Map)
+        : event;
+    final lat = _eventDouble(data['latitude']);
+    final lng = _eventDouble(data['longitude']);
+    if (!isUsableCoordinate(lat, lng)) return true;
+    final updatedAt = DateTime.tryParse(
+      '${data['location_updated_at'] ?? event['updated_at'] ?? ''}',
+    )?.toUtc();
+    final current =
+        _liveOverride ?? ref.read(orderTrackingProvider(_request)).value;
+    if (current == null) return true;
+    final previous = current.riderLocationUpdatedAt;
+    if (updatedAt != null &&
+        previous != null &&
+        !updatedAt.isAfter(previous)) {
+      return true;
+    }
+    setState(() {
+      _liveOverride = current.copyWith(
+        riderLatitude: lat,
+        riderLongitude: lng,
+        riderLocationUpdatedAt: updatedAt ?? DateTime.now().toUtc(),
+        riderMapsUrl:
+            'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+      );
+    });
+    return true;
+  }
+
+  double? _eventDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
+    _reconnectTimer?.cancel();
+    _socketSubscription?.cancel();
     _channel?.sink.close();
     _alertTimer?.cancel();
     super.dispose();
@@ -149,8 +245,12 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     // A delivered or cancelled order will never change again: stop both the
     // socket and the poll, so nothing keeps running for a finished order.
     if (isTerminalTrackingStatus(status)) {
+      _socketHealthy = false;
+      _reconnectTimer?.cancel();
+      _socketSubscription?.cancel();
       _channel?.sink.close();
       _channel = null;
+      _liveOverride = null;
       _stopPolling();
     }
     final next = trackingTimelineIndex(
@@ -173,10 +273,31 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     });
   }
 
+  OrderTracking? _effectiveTracking(OrderTracking? snapshot) {
+    final override = _liveOverride;
+    if (snapshot == null) return override;
+    if (override == null || override.orderId != snapshot.orderId) {
+      return snapshot;
+    }
+    final snapshotAt = snapshot.riderLocationUpdatedAt;
+    final overrideAt = override.riderLocationUpdatedAt;
+    if (snapshotAt != null &&
+        (overrideAt == null || snapshotAt.isAfter(overrideAt))) {
+      return snapshot;
+    }
+    return snapshot.copyWith(
+      riderLatitude: override.riderLatitude,
+      riderLongitude: override.riderLongitude,
+      riderMapsUrl: override.riderMapsUrl,
+      riderLocationUpdatedAt: override.riderLocationUpdatedAt,
+      route: override.route,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracking = ref.watch(orderTrackingProvider(_request));
-    final live = tracking.value;
+    final live = _effectiveTracking(tracking.value);
     if (widget.mode == DeliveryMode.grocery) {
       if (live != null) _syncGroceryStatus(live);
       return _buildGroceryTracking(context, tracking);
@@ -204,7 +325,8 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ? '$riderName is handling your delivery'
         : 'Live tracking updates will appear here';
     return Scaffold(
-      body: Padding(padding: EdgeInsets.zero,
+      body: Padding(
+        padding: EdgeInsets.zero,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
@@ -223,12 +345,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      // The real map only when this build has a Maps key
-                      // (GOOGLE_MAPS_ENABLED) and there is at least one real
-                      // point to show. Otherwise the existing placeholder, so
-                      // a missing key or missing coordinates never produces a
-                      // blank or broken map.
-                      child: kGoogleMapsEnabled &&
+                      // Keep the current tracking view until native readiness
+                      // is confirmed. Polling and socket lifecycles are separate.
+                      child:
+                          ref.watch(mapCapabilityProvider).value ==
+                                  MapCapability.available &&
                               live != null &&
                               (live.hasRiderLocation ||
                                   live.hasRestaurantLocation ||

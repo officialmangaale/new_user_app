@@ -39,6 +39,7 @@ class OrderTracking {
     this.restaurantLongitude,
     this.deliveryLatitude,
     this.deliveryLongitude,
+    this.route,
     this.deliveryStatus = '',
     this.orderType = '',
     this.statusReason = '',
@@ -88,6 +89,7 @@ class OrderTracking {
   /// Drop-off point, from the order's delivery address.
   final double? deliveryLatitude;
   final double? deliveryLongitude;
+  final TrackingRoute? route;
 
   /// A rider who has not reported for this long is shown as "updating" rather
   /// than as a live position. Their app sends every 20 seconds on an active
@@ -114,6 +116,65 @@ class OrderTracking {
     if (updated == null) return true;
     return now.difference(updated) > staleAfter;
   }
+
+  OrderTracking copyWith({
+    String? status,
+    String? deliveryStatus,
+    int? etaMinutes,
+    double? riderLatitude,
+    double? riderLongitude,
+    String? riderMapsUrl,
+    DateTime? riderLocationUpdatedAt,
+    TrackingRoute? route,
+  }) {
+    return OrderTracking(
+      orderId: orderId,
+      status: status ?? this.status,
+      orderType: orderType,
+      statusReason: statusReason,
+      timeline: timeline,
+      deliveryStatus: deliveryStatus ?? this.deliveryStatus,
+      statusLabel: statusLabel,
+      etaMinutes: etaMinutes ?? this.etaMinutes,
+      riderName: riderName,
+      riderPhone: riderPhone,
+      riderLatitude: riderLatitude ?? this.riderLatitude,
+      riderLongitude: riderLongitude ?? this.riderLongitude,
+      riderMapsUrl: riderMapsUrl ?? this.riderMapsUrl,
+      riderLocationUpdatedAt:
+          riderLocationUpdatedAt ?? this.riderLocationUpdatedAt,
+      restaurantName: restaurantName,
+      restaurantLatitude: restaurantLatitude,
+      restaurantLongitude: restaurantLongitude,
+      deliveryLatitude: deliveryLatitude,
+      deliveryLongitude: deliveryLongitude,
+      route: route ?? this.route,
+    );
+  }
+}
+
+class TrackingRoute {
+  const TrackingRoute({
+    required this.destinationType,
+    required this.encodedPolyline,
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.etaMinutes,
+    this.generatedAt,
+    this.expiresAt,
+    this.stale = false,
+  });
+
+  final String destinationType;
+  final String encodedPolyline;
+  final int distanceMeters;
+  final double durationSeconds;
+  final int etaMinutes;
+  final DateTime? generatedAt;
+  final DateTime? expiresAt;
+  final bool stale;
+
+  bool get hasPolyline => encodedPolyline.trim().isNotEmpty;
 }
 
 /// A coordinate pair worth putting on a map.

@@ -1,0 +1,2 @@
+// Native iOS SDK key only. Keep Maps.local.xcconfig out of version control.
+IOS_MAPS_API_KEY =

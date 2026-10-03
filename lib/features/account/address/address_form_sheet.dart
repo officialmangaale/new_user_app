@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../core/maps/map_capabilities.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'address_form_logic.dart';
 import 'address_location_capture.dart';
+import 'address_map_picker_sheet.dart';
 import 'address_providers.dart';
 import 'pincode_lookup.dart';
 
@@ -62,8 +65,10 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   static const _presetLabels = ['Home', 'Work'];
   static const _saveTimeout = Duration(seconds: 25);
   static const _pincodeDebounce = Duration(milliseconds: 400);
+  static const _searchDebounce = Duration(milliseconds: 350);
 
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _search;
   late final TextEditingController _customLabel;
   late final TextEditingController _house;
   late final TextEditingController _street;
@@ -94,6 +99,13 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   String _district = '';
   Timer? _pincodeTimer;
   int _lookupSeq = 0;
+  Timer? _searchTimer;
+  int _searchSeq = 0;
+  String? _placesSessionToken;
+  List<AddressPlaceSuggestion> _suggestions = const [];
+  bool _searching = false;
+  String? _searchError;
+  bool _resolvingPlace = false;
 
   bool get _isEdit => widget.existing != null;
 
@@ -108,6 +120,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     _customLabel = TextEditingController(
       text: _labelChoice == 'Other' ? label : '',
     );
+    _search = TextEditingController();
     _house = TextEditingController(text: existing?.addressLine1 ?? '');
     _street = TextEditingController();
     _area = TextEditingController(text: existing?.area ?? '');
@@ -129,7 +142,9 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   @override
   void dispose() {
     _pincodeTimer?.cancel();
+    _searchTimer?.cancel();
     for (final controller in [
+      _search,
       _customLabel,
       _house,
       _street,
@@ -149,6 +164,151 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
 
   // --- location ------------------------------------------------------------
 
+  String _newPlacesSessionToken() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${DateTime.now().microsecondsSinceEpoch}-$hex';
+  }
+
+  void _onSearchChanged(String value) {
+    _searchTimer?.cancel();
+    final query = value.trim();
+    if (query.length < 3) {
+      _searchSeq++;
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _searchError = null;
+      });
+      return;
+    }
+    _placesSessionToken ??= _newPlacesSessionToken();
+    _searchTimer = Timer(_searchDebounce, () => _searchPlaces(query));
+  }
+
+  Future<void> _searchPlaces(String query) async {
+    final seq = ++_searchSeq;
+    setState(() {
+      _searching = true;
+      _searchError = null;
+    });
+    try {
+      final results = await ref.read(accountRepositoryProvider).searchAddressPlaces(
+            query: query,
+            sessionToken: _placesSessionToken ??= _newPlacesSessionToken(),
+            latitude: isValidCoordinate(_latitude, _longitude) ? _latitude : null,
+            longitude: isValidCoordinate(_latitude, _longitude) ? _longitude : null,
+          );
+      if (!mounted || seq != _searchSeq || _search.text.trim() != query) {
+        return;
+      }
+      setState(() {
+        _suggestions = results;
+        _searching = false;
+        _searchError = results.isEmpty ? 'No matching places found.' : null;
+      });
+    } catch (_) {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+        _searchError = 'Search is unavailable. You can enter the address manually.';
+      });
+    }
+  }
+
+  Future<void> _selectSuggestion(AddressPlaceSuggestion suggestion) async {
+    if (_resolvingPlace) return;
+    final token = _placesSessionToken ??= _newPlacesSessionToken();
+    setState(() {
+      _resolvingPlace = true;
+      _searchError = null;
+    });
+    try {
+      final resolved = await ref.read(accountRepositoryProvider).resolveAddressPlace(
+            placeId: suggestion.placeId,
+            sessionToken: token,
+          );
+      if (!mounted) return;
+      _applyResolvedLocation(resolved, updatePin: true);
+      _placesSessionToken = null;
+      _search.text = suggestion.fullText;
+      setState(() {
+        _suggestions = const [];
+        _resolvingPlace = false;
+      });
+      if (resolved.hasPin && ref.read(customerMapPickerAvailableProvider)) {
+        await _openMapPicker(
+          latitude: resolved.latitude!,
+          longitude: resolved.longitude!,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _resolvingPlace = false;
+        _searchError = 'Could not use that place. Try another result or enter it manually.';
+      });
+    }
+  }
+
+  void _applyResolvedLocation(
+    ResolvedCustomerLocation resolved, {
+    required bool updatePin,
+  }) {
+    if (updatePin && resolved.hasPin) {
+      _latitude = resolved.latitude;
+      _longitude = resolved.longitude;
+      _accuracy = null;
+      _locationState = _LocationState.captured;
+      _locationFailure = null;
+    }
+    if (_house.text.trim().isEmpty && resolved.addressLine1.isNotEmpty) {
+      _house.text = resolved.addressLine1;
+    }
+    if (_area.text.trim().isEmpty && resolved.area.isNotEmpty) {
+      _area.text = resolved.area;
+    }
+    if (_city.text.trim().isEmpty && resolved.city.isNotEmpty) {
+      _city.text = resolved.city;
+    }
+    if (_state.text.trim().isEmpty && resolved.state.isNotEmpty) {
+      _state.text = resolved.state;
+    }
+    if (_pincode.text.trim().isEmpty && resolved.pincode.isNotEmpty) {
+      _pincode.text = resolved.pincode;
+    }
+    if (_district.isEmpty && resolved.district.isNotEmpty) {
+      _district = resolved.district;
+    }
+  }
+
+  Future<void> _openMapPicker({
+    double? latitude,
+    double? longitude,
+  }) async {
+    final startLat = latitude ?? _latitude;
+    final startLng = longitude ?? _longitude;
+    if (!isValidCoordinate(startLat, startLng)) return;
+    final result = await showAddressMapPickerSheet(
+      context,
+      latitude: startLat!,
+      longitude: startLng!,
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _latitude = result.latitude;
+      _longitude = result.longitude;
+      _accuracy = null;
+      _locationState = _LocationState.captured;
+      _locationFailure = null;
+      if (result.resolved != null) {
+        _applyResolvedLocation(result.resolved!, updatePin: false);
+      }
+    });
+  }
+
   Future<void> _captureLocation() async {
     if (_locationState == _LocationState.capturing) return;
     setState(() {
@@ -158,9 +318,11 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     });
     final result = await ref.read(addressLocationCaptureProvider).capture();
     if (!mounted) return;
+    CapturedLocation? captured;
     setState(() {
       final location = result.location;
       if (location != null) {
+        captured = location;
         _latitude = location.latitude;
         _longitude = location.longitude;
         _accuracy = location.accuracyMeters;
@@ -173,6 +335,12 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
             : _LocationState.failed;
       }
     });
+    if (captured != null && ref.read(customerMapPickerAvailableProvider)) {
+      await _openMapPicker(
+        latitude: captured!.latitude,
+        longitude: captured!.longitude,
+      );
+    }
   }
 
   void _removeLocation() {
@@ -331,6 +499,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     final houseServerError = _saveError?.field == AddressField.house
         ? _saveError!.message
         : null;
+    final placesAvailable = ref.watch(customerPlacesAvailableProvider);
+    final mapPickerAvailable = ref.watch(customerMapPickerAvailableProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
@@ -348,6 +518,17 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
               style: theme.textTheme.titleLarge,
             ),
             const SizedBox(height: 14),
+            if (placesAvailable) ...[
+              _AddressSearchBox(
+                controller: _search,
+                searching: _searching || _resolvingPlace,
+                error: _searchError,
+                suggestions: _suggestions,
+                onChanged: _saving ? null : _onSearchChanged,
+                onSelect: _saving ? null : _selectSuggestion,
+              ),
+              const SizedBox(height: 12),
+            ],
             _LocationCard(
               state: _locationState,
               failure: _locationFailure,
@@ -362,6 +543,9 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
               onOpenLocationSettings: () => ref
                   .read(addressLocationCaptureProvider)
                   .openLocationSettings(),
+              onPickOnMap: mapPickerAvailable && isValidCoordinate(_latitude, _longitude)
+                  ? () => _openMapPicker()
+                  : null,
             ),
             const SizedBox(height: 16),
             Text('Save as', style: theme.textTheme.labelLarge),
@@ -550,6 +734,7 @@ class _LocationCard extends StatelessWidget {
     required this.onRemove,
     required this.onOpenAppSettings,
     required this.onOpenLocationSettings,
+    required this.onPickOnMap,
   });
 
   final _LocationState state;
@@ -560,6 +745,7 @@ class _LocationCard extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback onOpenAppSettings;
   final VoidCallback onOpenLocationSettings;
+  final VoidCallback? onPickOnMap;
 
   @override
   Widget build(BuildContext context) {
@@ -659,6 +845,13 @@ class _LocationCard extends StatelessWidget {
                         : 'Use current location',
                   ),
                 ),
+              if (state == _LocationState.captured && onPickOnMap != null)
+                OutlinedButton.icon(
+                  key: const Key('address-adjust-map'),
+                  onPressed: onPickOnMap,
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: const Text('Adjust on map'),
+                ),
               if (state == _LocationState.captured)
                 TextButton(
                   onPressed: onRemove,
@@ -689,6 +882,89 @@ class _LocationCard extends StatelessWidget {
       LocationCaptureFailure.serviceDisabled => AddressCopy.gpsOff,
       _ => AddressCopy.locationUnavailable,
     };
+  }
+}
+
+class _AddressSearchBox extends StatelessWidget {
+  const _AddressSearchBox({
+    required this.controller,
+    required this.searching,
+    required this.error,
+    required this.suggestions,
+    required this.onChanged,
+    required this.onSelect,
+  });
+
+  final TextEditingController controller;
+  final bool searching;
+  final String? error;
+  final List<AddressPlaceSuggestion> suggestions;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<AddressPlaceSuggestion>? onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          key: const Key('address-place-search'),
+          controller: controller,
+          enabled: onChanged != null,
+          textInputAction: TextInputAction.search,
+          onChanged: onChanged,
+          decoration: InputDecoration(
+            labelText: 'Search area, apartment or landmark',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: searching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: 6),
+          Text(error!, style: TextStyle(color: theme.colorScheme.error)),
+        ],
+        if (suggestions.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Material(
+            key: const Key('address-place-suggestions'),
+            color: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: suggestions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final suggestion = suggestions[index];
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.place_outlined),
+                  title: Text(suggestion.primaryText),
+                  subtitle: suggestion.secondaryText.isEmpty
+                      ? null
+                      : Text(suggestion.secondaryText),
+                  onTap: onSelect == null ? null : () => onSelect!(suggestion),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

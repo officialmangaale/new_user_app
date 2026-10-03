@@ -122,6 +122,73 @@ class AccountRepository {
     }
   }
 
+  /// POST /customers/me/location/autocomplete
+  Future<List<AddressPlaceSuggestion>> searchAddressPlaces({
+    required String query,
+    required String sessionToken,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final response = await _client.user.post<dynamic>(
+        '/customers/me/location/autocomplete',
+        data: <String, dynamic>{
+          'query': query,
+          'session_token': sessionToken,
+          if (latitude != null && longitude != null)
+            'bias': <String, dynamic>{
+              'latitude': latitude,
+              'longitude': longitude,
+            },
+        },
+      );
+      final data = unwrapApiResponse(response.data);
+      return listFrom(data, keys: const ['suggestions', 'items'])
+          .map(AddressPlaceSuggestion.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  /// POST /customers/me/location/place-details
+  Future<ResolvedCustomerLocation> resolveAddressPlace({
+    required String placeId,
+    required String sessionToken,
+  }) async {
+    try {
+      final response = await _client.user.post<dynamic>(
+        '/customers/me/location/place-details',
+        data: <String, dynamic>{
+          'place_id': placeId,
+          'session_token': sessionToken,
+        },
+      );
+      return ResolvedCustomerLocation.fromJson(_locationObject(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  /// POST /customers/me/location/reverse-geocode
+  Future<ResolvedCustomerLocation> reverseGeocodeAddress({
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final response = await _client.user.post<dynamic>(
+        '/customers/me/location/reverse-geocode',
+        data: <String, dynamic>{
+          'latitude': latitude,
+          'longitude': longitude,
+        },
+      );
+      return ResolvedCustomerLocation.fromJson(_locationObject(response.data));
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
   /// user-service wraps the saved address as `{data: {address: {...}}}`.
   static CustomerAddress _addressFrom(Object? raw) {
     final data = unwrapApiObject(raw);
@@ -129,6 +196,12 @@ class AccountRepository {
     return CustomerAddress.fromJson(
       nested is Map ? Map<String, dynamic>.from(nested) : data,
     );
+  }
+
+  static Map<String, dynamic> _locationObject(Object? raw) {
+    final data = unwrapApiObject(raw);
+    final nested = data['location'];
+    return nested is Map ? Map<String, dynamic>.from(nested) : data;
   }
 
   // ------------------------------------------------------------------
@@ -427,6 +500,76 @@ class CustomerAddress {
       'location_accuracy_meters': ?locationAccuracyMeters,
     },
   };
+}
+
+class AddressPlaceSuggestion {
+  const AddressPlaceSuggestion({
+    required this.placeId,
+    required this.primaryText,
+    required this.fullText,
+    this.secondaryText = '',
+  });
+
+  final String placeId;
+  final String primaryText;
+  final String secondaryText;
+  final String fullText;
+
+  factory AddressPlaceSuggestion.fromJson(Map<String, dynamic> json) {
+    return AddressPlaceSuggestion(
+      placeId: readString(json, const ['place_id', 'id']),
+      primaryText: readString(json, const ['primary_text', 'primary']),
+      secondaryText: readString(json, const ['secondary_text', 'secondary']),
+      fullText: readString(json, const ['full_text', 'description']),
+    );
+  }
+}
+
+class ResolvedCustomerLocation {
+  const ResolvedCustomerLocation({
+    this.addressLine1 = '',
+    this.area = '',
+    this.city = '',
+    this.district = '',
+    this.state = '',
+    this.pincode = '',
+    this.latitude,
+    this.longitude,
+    this.formattedAddress = '',
+  });
+
+  final String addressLine1;
+  final String area;
+  final String city;
+  final String district;
+  final String state;
+  final String pincode;
+  final double? latitude;
+  final double? longitude;
+  final String formattedAddress;
+
+  bool get hasPin => latitude != null && longitude != null;
+
+  factory ResolvedCustomerLocation.fromJson(Map<String, dynamic> json) {
+    double? number(String key) {
+      final value = json[key];
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
+    return ResolvedCustomerLocation(
+      addressLine1: readString(json, const ['address_line1', 'line1']),
+      area: readString(json, const ['area', 'locality']),
+      city: readString(json, const ['city']),
+      district: readString(json, const ['district']),
+      state: readString(json, const ['state']),
+      pincode: readString(json, const ['pincode', 'postal_code']),
+      latitude: number('latitude'),
+      longitude: number('longitude'),
+      formattedAddress: readString(json, const ['formatted_address']),
+    );
+  }
 }
 
 class PaymentMethod {

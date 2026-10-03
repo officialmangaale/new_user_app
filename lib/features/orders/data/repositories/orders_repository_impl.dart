@@ -332,6 +332,10 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
       final addressSource = address is Map
           ? Map<String, dynamic>.from(address)
           : <String, dynamic>{};
+      final route = data['route'];
+      final routeSource = route is Map
+          ? Map<String, dynamic>.from(route)
+          : <String, dynamic>{};
       final riderName = readString(source, const [
         'rider_name',
         'delivery_partner',
@@ -386,11 +390,34 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
           deliveryLongitude: _optionalDouble(addressSource, const [
             'longitude',
           ]),
+          route: _trackingRoute(routeSource),
         ),
       );
     } on ApiException catch (error) {
       return Result.failure(Failure.fromApiException(error));
     }
+  }
+
+  TrackingRoute? _trackingRoute(Map<String, dynamic> source) {
+    if (source.isEmpty) return null;
+    final encoded = readString(source, const ['encoded_polyline']);
+    final destinationType = readString(source, const ['destination_type']);
+    if (encoded.isEmpty && destinationType.isEmpty) return null;
+    return TrackingRoute(
+      destinationType: destinationType,
+      encodedPolyline: encoded,
+      distanceMeters: readInt(source, const ['distance_meters']),
+      durationSeconds:
+          _optionalDouble(source, const ['duration_seconds']) ?? 0,
+      etaMinutes: readInt(source, const ['eta_minutes']),
+      generatedAt: DateTime.tryParse(
+        readString(source, const ['generated_at']),
+      )?.toUtc(),
+      expiresAt: DateTime.tryParse(
+        readString(source, const ['expires_at']),
+      )?.toUtc(),
+      stale: source['stale'] == true,
+    );
   }
 
   /// Like [readDouble] but distinguishes "absent" from a genuine 0, so an

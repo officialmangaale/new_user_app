@@ -3,16 +3,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../orders/domain/entities/order_entities.dart';
+import '../domain/encoded_polyline.dart';
 import '../domain/map_viewport.dart';
-
-/// Whether this build renders a real Google Map.
-///
-/// Opt-in with `--dart-define=GOOGLE_MAPS_ENABLED=true`. The Android key comes
-/// from local.properties or the MAPS_API_KEY environment variable; without
-/// both, leaving this off means the map widget is never built, so a build
-/// with no key shows the text tracking view instead of a blank or crashing
-/// map.
-const bool kGoogleMapsEnabled = bool.fromEnvironment('GOOGLE_MAPS_ENABLED');
 
 /// Live map for an order: rider, pickup and drop-off.
 ///
@@ -81,19 +73,25 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
     return lerpGeoPoint(from, to, Curves.easeInOut.transform(_glide.value));
   }
 
-  static GeoPoint? _riderPoint(OrderTracking t) => t.hasRiderLocation
-      ? GeoPoint(t.riderLatitude!, t.riderLongitude!)
-      : null;
+  static GeoPoint? _riderPoint(OrderTracking t) =>
+      t.hasRiderLocation ? GeoPoint(t.riderLatitude!, t.riderLongitude!) : null;
 
   List<GeoPoint> get _framedPoints {
     final t = widget.tracking;
     return [
       ?_glideTo,
+      ..._routePoints,
       if (t.hasRestaurantLocation)
         GeoPoint(t.restaurantLatitude!, t.restaurantLongitude!),
       if (t.hasDeliveryLocation)
         GeoPoint(t.deliveryLatitude!, t.deliveryLongitude!),
     ];
+  }
+
+  List<GeoPoint> get _routePoints {
+    final route = widget.tracking.route;
+    if (route == null || !route.hasPolyline || route.stale) return const [];
+    return decodeEncodedPolyline(route.encodedPolyline);
   }
 
   Future<void> _fitCamera() async {
@@ -104,8 +102,14 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
       await controller.animateCamera(
         CameraUpdate.newLatLngBounds(
           LatLngBounds(
-            southwest: LatLng(bounds.southwest.latitude, bounds.southwest.longitude),
-            northeast: LatLng(bounds.northeast.latitude, bounds.northeast.longitude),
+            southwest: LatLng(
+              bounds.southwest.latitude,
+              bounds.southwest.longitude,
+            ),
+            northeast: LatLng(
+              bounds.northeast.latitude,
+              bounds.northeast.longitude,
+            ),
           ),
           56,
         ),
@@ -125,14 +129,17 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
   Widget build(BuildContext context) {
     final t = widget.tracking;
     final rider = _currentRiderPoint;
-    final stale = t.hasRiderLocation && t.isRiderLocationStaleAt(DateTime.now().toUtc());
+    final stale =
+        t.hasRiderLocation && t.isRiderLocationStaleAt(DateTime.now().toUtc());
 
     final markers = <Marker>{
       if (t.hasRestaurantLocation)
         Marker(
           markerId: const MarkerId('restaurant'),
           position: LatLng(t.restaurantLatitude!, t.restaurantLongitude!),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueOrange,
+          ),
           infoWindow: InfoWindow(
             title: t.restaurantName.isEmpty ? 'Pickup' : t.restaurantName,
           ),
@@ -160,6 +167,20 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
           ),
         ),
     };
+    final routePoints = _routePoints;
+    final polylines = <Polyline>{
+      if (routePoints.length > 1)
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: [
+            for (final point in routePoints)
+              LatLng(point.latitude, point.longitude),
+          ],
+          color: AppColors.dark,
+          width: 5,
+          geodesic: true,
+        ),
+    };
 
     final initial = boundsFor(_framedPoints);
     final centre = initial == null
@@ -180,6 +201,7 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
           child: GoogleMap(
             initialCameraPosition: CameraPosition(target: centre, zoom: 14),
             markers: markers,
+            polylines: polylines,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
@@ -202,7 +224,10 @@ class _LiveTrackingMapState extends State<LiveTrackingMap>
             elevation: 3,
             child: IconButton(
               tooltip: 'Recenter',
-              icon: const Icon(Icons.my_location_rounded, color: AppColors.dark),
+              icon: const Icon(
+                Icons.my_location_rounded,
+                color: AppColors.dark,
+              ),
               onPressed: _recenter,
             ),
           ),

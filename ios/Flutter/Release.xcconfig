@@ -1,1 +1,3 @@
 #include "Generated.xcconfig"
+IOS_MAPS_API_KEY =
+#include? "Maps.local.xcconfig"
