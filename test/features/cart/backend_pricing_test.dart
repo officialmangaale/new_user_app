@@ -79,7 +79,8 @@ void main() {
         'customer_bill': {
           'subtotal': 100.25,
           'coupon_discount': 10.75,
-          'discount_amount': 3.25,
+          'discount_amount': 14.00,
+          'offer_discount': 3.25,
           'delivery_fee': 20.25,
           'platform_fee': 2.50,
           'packaging_fee': 4.25,

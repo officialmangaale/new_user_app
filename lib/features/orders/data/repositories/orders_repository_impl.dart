@@ -637,6 +637,30 @@ BillSummary _billSummaryFromJson(Map<String, dynamic> json) {
       : double.tryParse('$totalRaw') ?? double.nan;
   final items = source['items'];
   final fees = source['fees'];
+  final packagingCharge = readDouble(source, const [
+    'packaging_fee',
+    'packaging_charge',
+  ]);
+  final platformFee = readDouble(source, const [
+    'platform_fee',
+    'platform_fee_amount',
+  ]);
+  final explicitAdditional = readDouble(source, const ['additional_charges']);
+  final dynamicFeesTotal = readDouble(source, const ['dynamic_fees_total']);
+  final legacyExtraCharges = readDouble(source, const ['extra_charges']);
+  final hasVisibleFeeRows = fees is List && fees.isNotEmpty;
+  final hasSeparatedCharges =
+      source.containsKey('packaging_fee') ||
+      source.containsKey('packaging_charge') ||
+      source.containsKey('additional_charges') ||
+      source.containsKey('dynamic_fees_total') ||
+      source.containsKey('platform_fee') ||
+      source.containsKey('platform_fee_amount');
+  final additionalCharges = hasSeparatedCharges
+      ? explicitAdditional + (hasVisibleFeeRows ? 0 : dynamicFeesTotal)
+      : (legacyExtraCharges - platformFee - packagingCharge)
+            .clamp(0, double.infinity)
+            .toDouble();
   return BillSummary(
     subtotal: readDouble(source, const [
       'subtotal',
@@ -649,28 +673,17 @@ BillSummary _billSummaryFromJson(Map<String, dynamic> json) {
       'discount',
     ]),
     deliveryFee: readDouble(source, const ['delivery_fee', 'delivery_charge']),
-    packagingCharge: readDouble(source, const [
-      'packaging_fee',
-      'packaging_charge',
-    ]),
-    additionalCharges: readDouble(source, const [
-      'additional_charges',
-      'extra_charges',
-    ]),
+    packagingCharge: packagingCharge,
+    additionalCharges: additionalCharges,
     offerDiscount: readDouble(
       source,
-      json['customer_bill'] is Map
-          ? const ['discount_amount']
-          : const ['offer_discount_amount'],
+      const ['offer_discount', 'offer_discount_amount', 'referral_discount'],
     ),
     tipAmount: readDouble(source, const ['tip_amount']),
     cgst: readDouble(source, const ['cgst', 'cgst_amount']),
     sgst: readDouble(source, const ['sgst', 'sgst_amount']),
     taxAmount: readDouble(source, const ['tax_amount', 'taxes']),
-    platformFee: readDouble(source, const [
-      'platform_fee',
-      'platform_fee_amount',
-    ]),
+    platformFee: platformFee,
     roundOff: readDouble(source, const ['round_off_amount', 'round_off']),
     grandTotal: total.isFinite ? total : 0,
     valid:

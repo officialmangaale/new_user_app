@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/di_providers.dart';
+import '../../../core/services/api_exception.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/location_providers.dart';
@@ -183,9 +184,19 @@ final cartBillProvider = FutureProvider<BillSummary>((ref) async {
       : null;
   final locationFuture = ref.watch(currentLocationProvider.future);
   if (lines.isEmpty) throw StateError('Your cart is empty.');
-  final addresses = addressesFuture == null
-      ? const <CustomerAddress>[]
-      : await addressesFuture;
+  final List<CustomerAddress> addresses;
+  try {
+    addresses = addressesFuture == null
+        ? const <CustomerAddress>[]
+        : await addressesFuture;
+  } on ApiException catch (error) {
+    if (error.isAuthError) {
+      throw StateError(
+        'Your session has expired. Please login again to continue checkout.',
+      );
+    }
+    rethrow;
+  }
   final address =
       addresses.where((a) => a.isDefault).firstOrNull ?? addresses.firstOrNull;
   final location = address?.hasPin == true ? null : await locationFuture;
@@ -196,7 +207,7 @@ final cartBillProvider = FutureProvider<BillSummary>((ref) async {
       ? address!.longitude
       : location?.longitude;
   if (latitude == null || longitude == null) {
-    throw StateError('Add a delivery location to see prices.');
+    throw StateError('Please select a delivery address with location pin.');
   }
   final grocery = lines.first.item.type == CatalogItemType.grocery;
   final result = grocery

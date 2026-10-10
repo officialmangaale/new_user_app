@@ -442,15 +442,22 @@ class _BillDetails extends ConsumerWidget {
             ),
             const SizedBox(height: 14),
             _row('Item total', bill.subtotal),
+            if (bill.deliveryFee > 0) _row('Delivery fee', bill.deliveryFee),
+            if (bill.platformFee > 0) _row('Platform fee', bill.platformFee),
+            if (bill.packagingCharge > 0)
+              _row('Packaging fee', bill.packagingCharge),
+            if (bill.additionalCharges > 0)
+              _row('Additional charges', bill.additionalCharges),
+            for (final fee in bill.fees)
+              if (fee.amount > 0) _row(fee.title, fee.amount),
+            if (bill.discount > 0)
+              _row('Coupon discount', bill.discount, discount: true),
             if (bill.offerDiscount > 0)
-              _row('Discount', bill.offerDiscount, discount: true),
-            _row('Delivery charge', bill.deliveryFee),
-            _row('Platform fee', bill.platformFee),
-            _row('Packaging', bill.packagingCharge),
-            _row('Additional charges', bill.additionalCharges),
-            for (final fee in bill.fees) _row(fee.title, fee.amount),
-            _row('Coupon discount', bill.discount, discount: bill.discount > 0),
-            _row('Taxes', bill.taxAmount),
+              _row('Offer discount', bill.offerDiscount, discount: true),
+            if (bill.cgst > 0) _row('CGST', bill.cgst),
+            if (bill.sgst > 0) _row('SGST', bill.sgst),
+            if (bill.taxAmount > 0 && bill.cgst <= 0 && bill.sgst <= 0)
+              _row('Taxes', bill.taxAmount),
             if (bill.tipAmount > 0) _row('Tip', bill.tipAmount),
             if (bill.roundOff != 0) _row('Round off', bill.roundOff),
             const Divider(),
