@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,8 +8,6 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
-
-import java.util.Properties
 
 // Google Maps API key for the live-tracking map.
 //
@@ -28,8 +28,70 @@ val mapsApiKey: String =
         ?: System.getenv("MAPS_API_KEY")
         ?: ""
 
+// Release signing (FD-05).
+//
+// Never committed. The release keystore and its passwords are read, in order,
+// from:
+//   1. android/key.properties (git-ignored; copy key.properties.example)
+//        storeFile=...  storePassword=...  keyAlias=...  keyPassword=...
+//   2. environment variables for CI:
+//        ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD,
+//        ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+//
+// Debug builds are always debug-signed. A RELEASE build without a real
+// keystore FAILS instead of quietly shipping a debug-signed app. A local
+// release smoke test can opt out with ALLOW_DEBUG_SIGNED_RELEASE=true in
+// key.properties or the environment; such a build must never be distributed.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(propertyKey: String, envKey: String): String =
+    (keystoreProperties.getProperty(propertyKey) ?: System.getenv(envKey) ?: "").trim()
+
+fun String.isRealSigningValue(): Boolean =
+    isNotEmpty() &&
+        !startsWith("YOUR_", ignoreCase = true) &&
+        !contains("path/to/your", ignoreCase = true) &&
+        !contains("path\\to\\your", ignoreCase = true)
+
+val releaseStorePath = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
+val releaseStoreFile = releaseStorePath
+    .takeIf { it.isRealSigningValue() }
+    ?.let { rootProject.file(it).takeIf { f -> f.isFile } ?: file(it).takeIf { f -> f.isFile } }
+val releaseStorePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+val hasReleaseSigningConfig =
+    releaseStoreFile != null &&
+        releaseStorePassword.isRealSigningValue() &&
+        releaseKeyAlias.isRealSigningValue() &&
+        releaseKeyPassword.isRealSigningValue()
+val allowDebugSignedRelease =
+    (keystoreProperties.getProperty("ALLOW_DEBUG_SIGNED_RELEASE")
+        ?: System.getenv("ALLOW_DEBUG_SIGNED_RELEASE")
+        ?: "").trim().equals("true", ignoreCase = true)
+
+gradle.taskGraph.whenReady {
+    val releaseBuildRequested = allTasks.any {
+        it.project == project &&
+            (it.name.startsWith("assembleRelease") ||
+                it.name.startsWith("bundleRelease") ||
+                it.name.startsWith("packageRelease"))
+    }
+    if (releaseBuildRequested && !hasReleaseSigningConfig && !allowDebugSignedRelease) {
+        throw GradleException(
+            "Release signing is not configured: refusing to produce a debug-signed release. " +
+                "Provide android/key.properties (see key.properties.example) or the " +
+                "ANDROID_KEYSTORE_* environment variables. For a local smoke test only, set " +
+                "ALLOW_DEBUG_SIGNED_RELEASE=true."
+        )
+    }
+}
+
 android {
-    namespace = "com.turquoise.turquoise_delivery"
+    namespace = "com.mangaale.order"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -39,9 +101,20 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.turquoise.turquoise_delivery"
+        applicationId = "com.mangaale.order"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -53,9 +126,14 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Production key when configured. Without it the task graph check
+            // above already refused the build, unless ALLOW_DEBUG_SIGNED_RELEASE
+            // explicitly opted in for a local, non-distributable smoke test.
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

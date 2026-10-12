@@ -1,0 +1,16 @@
+# Release signing for the customer app (FD-05).
+#
+# Copy this file to android/key.properties (git-ignored) and fill in the real
+# values. Never commit key.properties or the keystore itself.
+#
+# CI can provide the same four values through the environment instead:
+#   ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#
+# A release build without a real keystore fails on purpose. For a local
+# smoke test that will never be distributed you may add:
+#   ALLOW_DEBUG_SIGNED_RELEASE=true
+storeFile=YOUR_PATH_TO_RELEASE_KEYSTORE.jks
+storePassword=YOUR_STORE_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+keyPassword=YOUR_KEY_PASSWORD

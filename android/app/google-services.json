@@ -7,6 +7,44 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:505647378372:android:e35d9370656a54f868be91",
+        "android_client_info": {
+          "package_name": "com.mangaale.mangaale_shopkeeper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAGrcsBsqk73iD2yc3PAVngaUsP9OuKJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505647378372:android:8ac43b291f94485268be91",
+        "android_client_info": {
+          "package_name": "com.mangaale.order"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAGrcsBsqk73iD2yc3PAVngaUsP9OuKJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:505647378372:android:787c350db34a85f568be91",
         "android_client_info": {
           "package_name": "com.mangaale.restaurant"
@@ -26,9 +64,28 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:505647378372:android:537862d182d3486268be91",
+        "mobilesdk_app_id": "1:505647378372:android:9a0229cd87a5f5a968be91",
         "android_client_info": {
-          "package_name": "com.turquoise.turquoise_delivery"
+          "package_name": "com.mangaale_delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAGrcsBsqk73iD2yc3PAVngaUsP9OuKJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:505647378372:android:20aa64c439572b1668be91",
+        "android_client_info": {
+          "package_name": "com.mangaale_rider"
         }
       },
       "oauth_client": [],

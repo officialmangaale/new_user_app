@@ -1,4 +1,4 @@
-package com.turquoise.turquoise_delivery
+package com.mangaale.order
 
 import io.flutter.embedding.android.FlutterActivity
 import android.content.pm.PackageManager
