@@ -30,7 +30,11 @@ class CartDock extends ConsumerWidget {
 }
 
 class FloatingCartBar extends ConsumerStatefulWidget {
-  const FloatingCartBar({super.key});
+  const FloatingCartBar({this.summary = false, super.key});
+
+  /// Compact two-line layout ("2 items added" / "₹360 + taxes" / "View cart")
+  /// used by the restaurant menu. The default shows item thumbnails.
+  final bool summary;
   @override
   ConsumerState<FloatingCartBar> createState() => _FloatingCartBarState();
 }
@@ -164,94 +168,103 @@ class _FloatingCartBarState extends ConsumerState<FloatingCartBar>
               color: AppColors.primary,
               elevation: 7,
               shadowColor: AppColors.shadow,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(widget.summary ? 16 : 24),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 enableFeedback: false,
                 onTap: _open,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(
+                child: widget.summary
+                    ? _SummaryBarContent(
                         key: _photosKey,
-                        width: 38 + math.max(0, items.length - 1) * 24.0,
-                        height: 38,
-                        child: Stack(
+                        count: count,
+                        total: total,
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: Row(
                           children: [
-                            for (var i = 0; i < items.length; i++)
-                              Positioned(
-                                left: i * 24.0,
-                                top: 0,
-                                child: Container(
-                                  key: _thumbnailKeys[items[i].key],
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color:
-                                        (_flights.arrivals.value?.startsWith(
-                                                  '${items[i].key}:',
-                                                ) ??
-                                                false) &&
-                                            pulse > .1
-                                        ? Colors.amber.shade200
-                                        : Colors.white,
-                                  ),
-                                  child: AppNetworkImage(
-                                    url: items[i].value.imageUrl,
-                                    width: 34,
-                                    height: 34,
-                                    borderRadius: 99,
-                                    semanticLabel: items[i].value.name,
+                            SizedBox(
+                              key: _photosKey,
+                              width: 38 + math.max(0, items.length - 1) * 24.0,
+                              height: 38,
+                              child: Stack(
+                                children: [
+                                  for (var i = 0; i < items.length; i++)
+                                    Positioned(
+                                      left: i * 24.0,
+                                      top: 0,
+                                      child: Container(
+                                        key: _thumbnailKeys[items[i].key],
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color:
+                                              (_flights.arrivals.value
+                                                          ?.startsWith(
+                                                            '${items[i].key}:',
+                                                          ) ??
+                                                      false) &&
+                                                  pulse > .1
+                                              ? Colors.amber.shade200
+                                              : Colors.white,
+                                        ),
+                                        child: AppNetworkImage(
+                                          url: items[i].value.imageUrl,
+                                          width: 34,
+                                          height: 34,
+                                          borderRadius: 99,
+                                          semanticLabel: items[i].value.name,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (distinct.length > 3)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 5),
+                                child: Text(
+                                  '+${distinct.length - 3}',
+                                  style: const TextStyle(
+                                    color: AppColors.onPrimary,
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      if (distinct.length > 3)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 5),
-                          child: Text(
-                            '+${distinct.length - 3}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'View cart',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'View cart',
+                                    style: TextStyle(
+                                      color: AppColors.onPrimary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Text(
+                                    '$count ${count == 1 ? 'item' : 'items'} · ₹$total',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.onPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            Text(
-                              '$count ${count == 1 ? 'item' : 'items'} · ₹$total',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              color: AppColors.onPrimary,
                             ),
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.arrow_forward_rounded,
-                        color: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
           );
@@ -273,5 +286,83 @@ class _CartPanel extends ConsumerWidget {
       }
     });
     return CartScreen(onClose: () => Navigator.of(context).pop());
+  }
+}
+
+/// Menu-screen cart bar body: item count + subtotal on the left, CTA on the
+/// right. Dark ink on the turquoise fill, never white.
+class _SummaryBarContent extends StatelessWidget {
+  const _SummaryBarContent({
+    required this.count,
+    required this.total,
+    super.key,
+  });
+
+  final int count;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final noun = count == 1 ? 'item' : 'items';
+    return Semantics(
+      button: true,
+      label: '$count $noun added, ₹$total plus taxes. View cart',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          height: 60,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$count $noun added',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 12,
+                          height: 1.2,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '₹$total + taxes',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 16,
+                          height: 1.25,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  'View cart',
+                  style: TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppColors.ink,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

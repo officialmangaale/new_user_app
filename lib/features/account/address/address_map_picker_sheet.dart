@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../shared/repositories/account_repository.dart';
-import '../../orders/providers/orders_providers.dart';
+import '../../app_state/providers/location_providers.dart';
+
 import 'address_form_logic.dart';
 
 class AddressMapPickerResult {
@@ -24,6 +25,7 @@ Future<AddressMapPickerResult?> showAddressMapPickerSheet(
   BuildContext context, {
   required double latitude,
   required double longitude,
+  String? initialAddress,
 }) {
   return showModalBottomSheet<AddressMapPickerResult>(
     context: context,
@@ -35,6 +37,7 @@ Future<AddressMapPickerResult?> showAddressMapPickerSheet(
       child: AddressMapPickerSheet(
         latitude: latitude,
         longitude: longitude,
+        initialAddress: initialAddress,
       ),
     ),
   );
@@ -45,10 +48,15 @@ class AddressMapPickerSheet extends ConsumerStatefulWidget {
     super.key,
     required this.latitude,
     required this.longitude,
+    this.initialAddress,
   });
 
   final double latitude;
   final double longitude;
+
+  /// The address Google returned for the place the customer chose, shown only
+  /// while the pin has not been moved. Never invented: null when unknown.
+  final String? initialAddress;
 
   @override
   ConsumerState<AddressMapPickerSheet> createState() =>
@@ -67,6 +75,10 @@ class _AddressMapPickerSheetState
   ResolvedCustomerLocation? _resolved;
   String? _error;
 
+  /// Becomes true once the pin has moved away from where the sheet opened, so
+  /// the address Google returned for the original place is no longer shown.
+  bool _pinMoved = false;
+
   @override
   void initState() {
     super.initState();
@@ -83,6 +95,12 @@ class _AddressMapPickerSheetState
 
   void _onCameraMove(CameraPosition position) {
     _selected = position.target;
+    // About 5 m; ignores the sub-metre jitter of a camera settling.
+    if (!_pinMoved &&
+        ((position.target.latitude - widget.latitude).abs() > 0.00005 ||
+            (position.target.longitude - widget.longitude).abs() > 0.00005)) {
+      _pinMoved = true;
+    }
   }
 
   void _onCameraIdle() {
@@ -104,12 +122,25 @@ class _AddressMapPickerSheetState
       _error = null;
     });
     try {
-      final resolved = await ref
-          .read(accountRepositoryProvider)
-          .reverseGeocodeAddress(latitude: latitude, longitude: longitude);
+      // The device geocoder: no API key, and not the Geocoding API.
+      final place = await ref
+          .read(reverseGeocoderProvider)
+          .reverse(latitude, longitude)
+          .timeout(const Duration(seconds: 10));
       if (!mounted || seq != _reverseSeq) return;
       setState(() {
-        _resolved = resolved;
+        _resolved = place != null && place.isMeaningful
+            ? ResolvedCustomerLocation(
+                area: place.area,
+                city: place.city,
+                district: place.district,
+                state: place.state,
+                pincode: place.postalCode,
+                latitude: latitude,
+                longitude: longitude,
+                formattedAddress: place.formatted,
+              )
+            : null;
         _resolving = false;
       });
     } catch (_) {
@@ -134,7 +165,12 @@ class _AddressMapPickerSheetState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final address = _resolved?.formattedAddress ?? _resolved?.addressLine1;
+    final initial = _pinMoved ? null : widget.initialAddress;
+    final address = _resolved?.formattedAddress.isNotEmpty == true
+        ? _resolved!.formattedAddress
+        : (_resolved?.addressLine1.isNotEmpty == true
+              ? _resolved!.addressLine1
+              : (initial?.isNotEmpty == true ? initial : null));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

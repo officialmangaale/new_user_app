@@ -35,7 +35,7 @@ class FavoriteRestaurantsScreen extends ConsumerWidget {
                 title: Text(r.name, style: Theme.of(context).textTheme.titleMedium),
                 subtitle: Text(r.tags, maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
-                  icon: const Icon(Icons.favorite, color: AppColors.primary),
+                  icon: const Icon(Icons.favorite, color: AppColors.primaryText),
                   onPressed: () => ref.read(toggleFavoriteRestaurantProvider)(r.id),
                 ),
               );
@@ -79,7 +79,7 @@ class FavoriteGroceryScreen extends ConsumerWidget {
                 title: Text(i.name, style: Theme.of(context).textTheme.titleMedium),
                 subtitle: Text('₹${i.sellingPrice} • ${i.packageSize}'),
                 trailing: IconButton(
-                  icon: const Icon(Icons.bookmark, color: AppColors.primary),
+                  icon: const Icon(Icons.bookmark, color: AppColors.primaryText),
                   onPressed: () => ref.read(toggleFavoriteGroceryProvider)(i.productId),
                 ),
               );

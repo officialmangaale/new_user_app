@@ -164,7 +164,7 @@ class AppSearchBar extends StatelessWidget {
           suffixIcon: const Icon(
             Icons.tune_rounded,
             size: 21,
-            color: AppColors.primaryDark,
+            color: AppColors.primaryText,
           ),
         ),
       ),
@@ -265,7 +265,7 @@ class DeliveryModeSwitch extends StatelessWidget {
       height: 52,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFECEFF1),
+        color: AppColors.disabledBackground,
         borderRadius: BorderRadius.circular(17),
       ),
       child: Row(
@@ -467,7 +467,7 @@ class QuantityControl extends StatelessWidget {
                     '$quantity',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -521,7 +521,7 @@ class _QuantityButton extends StatelessWidget {
         HapticFeedback.selectionClick();
         onTap();
       },
-      icon: Icon(icon, size: 18, color: Colors.white),
+      icon: Icon(icon, size: 18, color: AppColors.onPrimary),
     );
   }
 }
@@ -613,7 +613,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
         itemBuilder: (_, _) => Container(
           height: 116,
           decoration: BoxDecoration(
-            color: const Color(0xFFE5E7EB),
+            color: AppColors.disabledBackground,
             borderRadius: BorderRadius.circular(18),
           ),
         ),

@@ -11,11 +11,21 @@ class ApiException implements Exception {
     required this.statusCode,
     required this.message,
     this.errors,
+    this.code,
+    this.data,
   });
 
   final int statusCode;
   final String message;
   final Map<String, dynamic>? errors;
+
+  /// Stable machine code (`DELIVERY_PRICING_UNAVAILABLE`, ...) when the API
+  /// sent one, from `code` or `error.code`.
+  final String? code;
+
+  /// The response's `data` object when it is a map. Coded refusals carry
+  /// their detail here (for example `pricing_status`).
+  final Map<String, dynamic>? data;
 
   /// Network unreachable, DNS failure, or timeout — safe to retry.
   bool get isNetworkError => statusCode == 0;
@@ -65,8 +75,13 @@ class ApiException implements Exception {
           : const <String, dynamic>{};
       final message =
           map['message'] ?? nested['message'] ?? map['error'] ?? nested['code'];
+      final rawCode = map['code'] ?? nested['code'];
       return ApiException(
         statusCode: status,
+        code: rawCode is String && rawCode.trim().isNotEmpty ? rawCode : null,
+        data: map['data'] is Map
+            ? Map<String, dynamic>.from(map['data'] as Map)
+            : null,
         message: message is String && message.trim().isNotEmpty
             ? message
             : 'Request failed with status $status',

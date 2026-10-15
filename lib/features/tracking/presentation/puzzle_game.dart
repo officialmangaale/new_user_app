@@ -290,7 +290,7 @@ class _WaitingPuzzleGameState extends State<WaitingPuzzleGame> {
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: _matched.contains(index)
-                                  ? const Color(0xFFDDF7F1)
+                                  ? const Color(0xFFCFFAF7)
                                   : visible
                                   ? Colors.white
                                   : AppColors.primary,
@@ -317,13 +317,13 @@ class _WaitingPuzzleGameState extends State<WaitingPuzzleGame> {
                                   ? Icon(
                                       _cards[index],
                                       key: ValueKey('symbol-$index'),
-                                      color: AppColors.primaryDark,
+                                      color: AppColors.primaryText,
                                       size: 28,
                                     )
                                   : const Icon(
                                       Icons.auto_awesome_rounded,
                                       key: ValueKey('hidden'),
-                                      color: Colors.white,
+                                      color: AppColors.onPrimary,
                                       size: 21,
                                     ),
                             ),

@@ -772,6 +772,12 @@ class _MapMarker extends StatelessWidget {
   final String label;
   final Color color;
 
+  /// Readable icon colour for the marker fill (the brand primary is light).
+  static Color _onColor(Color fill) =>
+      ThemeData.estimateBrightnessForColor(fill) == Brightness.light
+      ? AppColors.onPrimary
+      : Colors.white;
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -787,7 +793,7 @@ class _MapMarker extends StatelessWidget {
               BoxShadow(color: Color(0x30000000), blurRadius: 8),
             ],
           ),
-          child: Icon(icon, color: Colors.white, size: 21),
+          child: Icon(icon, color: _onColor(color), size: 21),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -1063,12 +1069,12 @@ class _StatusTimeline extends StatelessWidget {
                               radius: 10,
                               backgroundColor: complete
                                   ? AppColors.primary
-                                  : const Color(0xFFE5E7EB),
+                                  : AppColors.disabledBackground,
                               child: complete
                                   ? const Icon(
                                       Icons.check,
                                       size: 12,
-                                      color: Colors.white,
+                                      color: AppColors.onPrimary,
                                     )
                                   : null,
                             ),
@@ -1078,7 +1084,7 @@ class _StatusTimeline extends StatelessWidget {
                                   width: 2,
                                   color: complete && index < currentIndex
                                       ? AppColors.primary
-                                      : const Color(0xFFE5E7EB),
+                                      : AppColors.disabledBackground,
                                 ),
                               ),
                           ],

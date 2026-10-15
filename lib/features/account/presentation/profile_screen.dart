@@ -450,7 +450,7 @@ class _ProfileHero extends StatelessWidget {
                   child: Text(
                     _subtitle,
                     style: const TextStyle(
-                      color: Color(0xFFBCECE5),
+                      color: Color(0xFFBDF5F2),
                       fontSize: 12,
                     ),
                   ),
@@ -702,7 +702,7 @@ class InformationScreen extends ConsumerWidget {
                 child: const Icon(
                   Icons.info_outline_rounded,
                   size: 32,
-                  color: AppColors.primary,
+                  color: AppColors.primaryText,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -777,7 +777,7 @@ class InformationScreen extends ConsumerWidget {
                   child: const Icon(
                     Icons.info_outline_rounded,
                     size: 32,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),

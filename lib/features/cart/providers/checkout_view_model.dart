@@ -7,9 +7,9 @@ import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
-import '../../app_state/providers/location_providers.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'cart_controller.dart';
+import 'delivery_location.dart';
 
 /// Deliberately **not** `autoDispose`.
 ///
@@ -97,6 +97,11 @@ class CheckoutViewModel extends AsyncNotifier<void> {
       return Result.failure(failure);
     }
 
+    final mismatch = _doorDetailsMissing(address);
+    if (mismatch != null) {
+      state = AsyncValue.error(mismatch, StackTrace.current);
+      return Result.failure(mismatch);
+    }
     final delivery = await _resolveDelivery(address);
     if (delivery.failure != null) {
       state = AsyncValue.error(delivery.failure!, StackTrace.current);
@@ -169,6 +174,11 @@ class CheckoutViewModel extends AsyncNotifier<void> {
 
     final profile = await _readProfile();
     final address = await _readDefaultAddress();
+    final mismatch = _doorDetailsMissing(address);
+    if (mismatch != null) {
+      state = AsyncValue.error(mismatch, StackTrace.current);
+      return Result.failure(mismatch);
+    }
     final delivery = await _resolveDelivery(address);
     if (delivery.failure != null) {
       state = AsyncValue.error(delivery.failure!, StackTrace.current);
@@ -220,6 +230,22 @@ class CheckoutViewModel extends AsyncNotifier<void> {
     );
   }
 
+  /// The bill was priced on the selected delivery location. When that is the
+  /// device's current location - not a saved address - the order would be sent
+  /// to a different saved default, so it is refused until the door details are
+  /// saved. The checkout screen collects them first; this is the backstop.
+  ValidationFailure? _doorDetailsMissing(CustomerAddress? address) {
+    if (address == null) return null; // _resolveDelivery has the message
+    final selection = ref.read(deliveryLocationProvider).value;
+    if (selection is DeliveryLocationResolved &&
+        !selection.location.hasSavedDetails) {
+      return const ValidationFailure(
+        'Add your house or flat details to place this order.',
+      );
+    }
+    return null;
+  }
+
   /// Where the order goes, or why it cannot be placed.
   ///
   /// A saved address is required: a "Current location" order carries no
@@ -239,16 +265,15 @@ class CheckoutViewModel extends AsyncNotifier<void> {
     if (address.hasPin) {
       return _DeliveryTarget(address, address.latitude!, address.longitude!);
     }
-    final location = await ref.read(currentLocationProvider.future);
-    if (location == null) {
-      return const _DeliveryTarget.failed(
-        ValidationFailure(
-          'Pin this address so your rider can find you: edit it and tap '
-          '"Use current location", or turn on location.',
-        ),
-      );
-    }
-    return _DeliveryTarget(address, location.latitude, location.longitude);
+    // No device-location fallback: pricing and the order must use the same
+    // pin as the address the customer sees. An unpinned address is confirmed
+    // first (cart: "Use current location" or edit it), never guessed.
+    return const _DeliveryTarget.failed(
+      ValidationFailure(
+        'This saved address needs location confirmation. Open your cart and '
+        'tap "Use current location" or change the address.',
+      ),
+    );
   }
 
   static String? _nonEmpty(String value) {

@@ -46,6 +46,13 @@ class AuthStorage {
     return preferences.getString(_userIdKey);
   }
 
+  /// Records the name the customer gave at checkout. Only the name changes;
+  /// the session token and phone are left exactly as they are.
+  Future<void> saveUserName(String name) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_userNameKey, name.trim());
+  }
+
   Future<String?> readUserName() async {
     final preferences = await SharedPreferences.getInstance();
     return preferences.getString(_userNameKey);

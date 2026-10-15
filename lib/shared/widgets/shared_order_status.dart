@@ -78,7 +78,7 @@ class SharedOrderStatusBanner extends StatelessWidget {
         'Group available',
         'Join now to unlock the next savings milestone.',
         Icons.group_add_outlined,
-        AppColors.primaryDark,
+        AppColors.primaryText,
         AppColors.primaryVeryLight,
       ),
       SharedOrderUiStatus.nearlyFull => const _StatusPresentation(
@@ -155,7 +155,7 @@ class SharedOrderStatusBanner extends StatelessWidget {
         'Automatic refund started',
         'Your payment is being returned to the original method.',
         Icons.sync_rounded,
-        AppColors.primaryDark,
+        AppColors.primaryText,
         AppColors.primaryVeryLight,
       ),
       SharedOrderUiStatus.refundComplete => const _StatusPresentation(

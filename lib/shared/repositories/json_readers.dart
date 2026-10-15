@@ -74,3 +74,39 @@ List<Map<String, dynamic>> _mapList(List<Object?> source) => source
     .whereType<Map>()
     .map((entry) => Map<String, dynamic>.from(entry))
     .toList(growable: false);
+
+/// Distance in kilometres, or null when the response carries no real distance.
+///
+/// Unlike [readDouble] this never turns "missing" into 0: a restaurant without
+/// coordinates, or a request made without a delivery location, has no distance,
+/// and 0 km would claim the restaurant is at the customer's door.
+///
+/// Accepts `distance_km` (number or numeric string) first, then `distance`
+/// either as a bare number (kilometres) or with a unit such as `850 m` or
+/// `1.2 km`.
+double? readDistanceKm(Map<String, dynamic> json) {
+  double? finite(double? value) =>
+      value != null && value.isFinite && value >= 0 ? value : null;
+
+  final km = json['distance_km'];
+  if (km is num) return finite(km.toDouble());
+  if (km is String) {
+    final parsed = double.tryParse(km.trim());
+    if (parsed != null) return finite(parsed);
+  }
+
+  final raw = json['distance'];
+  if (raw is num) return finite(raw.toDouble());
+  if (raw is String) {
+    final match = RegExp(
+      r'^\s*([0-9]+(?:\.[0-9]+)?)\s*(km|m)?\s*$',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (match == null) return null;
+    final value = double.tryParse(match.group(1)!);
+    if (value == null) return null;
+    final unit = (match.group(2) ?? 'km').toLowerCase();
+    return finite(unit == 'm' ? value / 1000 : value);
+  }
+  return null;
+}

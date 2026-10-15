@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -9,7 +10,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Google Maps API key for the live-tracking map.
+// Google Maps API key for the live-tracking map and address picker.
+//
+// The key must be restricted in Google Cloud to the Maps SDK for Android and
+// to this app's applicationId (com.mangaale.order) plus the SHA-1 of every
+// certificate that signs a build that shows the map (debug, release, and the
+// Play App Signing certificate). Server-side keys never go here.
 //
 // Never committed. Read, in order, from:
 //   1. android/local.properties  ->  MAPS_API_KEY=...   (developer machines;
@@ -27,6 +33,49 @@ val mapsApiKey: String =
     localProperties.getProperty("MAPS_API_KEY")
         ?: System.getenv("MAPS_API_KEY")
         ?: ""
+
+// Maps build guard.
+//
+// Flutter hands --dart-define / --dart-define-from-file values to Gradle as the
+// "dart-defines" project property (comma-separated, base64). Without this check
+// a build that turns Maps ON but has no key compiles cleanly and quietly shows
+// the placeholder map, which is the failure this guard exists to prevent.
+//
+//   GOOGLE_MAPS_ENABLED=true + empty MAPS_API_KEY  -> release build FAILS,
+//                                                     debug build warns
+//   MAPS_API_KEY set + Maps flag off               -> release build warns
+//
+// Neither case alters a build that does not opt in to Maps.
+val mapsEnabledByDartDefine: Boolean =
+    ((project.findProperty("dart-defines") as String?) ?: "")
+        .split(',')
+        .filter { it.isNotBlank() }
+        .mapNotNull {
+            runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull()
+        }
+        .any { it.trim().equals("GOOGLE_MAPS_ENABLED=true", ignoreCase = true) }
+
+gradle.taskGraph.whenReady {
+    val releaseRequested = allTasks.any {
+        it.project == project &&
+            (it.name.startsWith("assembleRelease") ||
+                it.name.startsWith("bundleRelease") ||
+                it.name.startsWith("packageRelease"))
+    }
+    if (mapsEnabledByDartDefine && mapsApiKey.isBlank()) {
+        val message =
+            "GOOGLE_MAPS_ENABLED=true but MAPS_API_KEY is empty, so the app would show the " +
+                "placeholder map. Set MAPS_API_KEY in android/local.properties or the " +
+                "MAPS_API_KEY environment variable."
+        if (releaseRequested) throw GradleException(message) else logger.warn("WARNING: " + message)
+    }
+    if (releaseRequested && !mapsEnabledByDartDefine && mapsApiKey.isNotBlank()) {
+        logger.warn(
+            "WARNING: MAPS_API_KEY is set but GOOGLE_MAPS_ENABLED is not true for this release " +
+                "build, so the app will show the placeholder map instead of Google Maps."
+        )
+    }
+}
 
 // Release signing (FD-05).
 //

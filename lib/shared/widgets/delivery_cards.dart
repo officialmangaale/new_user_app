@@ -10,6 +10,7 @@ import '../../features/cart/presentation/floating_cart.dart';
 
 import '../../core/widgets/app_ui.dart';
 import '../models/app_models.dart';
+import '../formatting/distance_format.dart';
 
 class RestaurantCard extends StatelessWidget {
   const RestaurantCard({
@@ -54,7 +55,7 @@ class RestaurantCard extends StatelessWidget {
                       child: AppPill(
                         label: '${restaurant.discount}% OFF',
                         background: AppColors.primary,
-                        foreground: Colors.white,
+                        foreground: AppColors.onPrimary,
                       ),
                     ),
                   if (restaurant.foodShare && restaurant.discount <= 0)
@@ -65,7 +66,7 @@ class RestaurantCard extends StatelessWidget {
                         label: 'FoodShare',
                         icon: Icons.people_alt_rounded,
                         background: AppColors.primary,
-                        foreground: Colors.white,
+                        foreground: AppColors.onPrimary,
                       ),
                     ),
                   if (restaurant.deliveryMinutes > 0)
@@ -142,7 +143,7 @@ class RestaurantCard extends StatelessWidget {
                           if (restaurant.rating > 0) ...[
                             const Icon(
                               Icons.star_rounded,
-                              color: AppColors.primary,
+                              color: AppColors.primaryText,
                               size: 15,
                             ),
                             const SizedBox(width: 2),
@@ -200,7 +201,7 @@ class _MetaDot extends StatelessWidget {
 
 String _restaurantFooterMeta(Restaurant restaurant) {
   final parts = <String>[
-    if (restaurant.distanceKm > 0) '${restaurant.distanceKm} km',
+    ?formatDistanceKm(restaurant.distanceKm),
     if (restaurant.deliveryFee > 0) '₹${restaurant.deliveryFee} delivery',
   ];
   return parts.join('  •  ');
@@ -527,7 +528,7 @@ class DiscountMilestoneProgress extends StatelessWidget {
               'Up to ${group.maximumDiscount}%',
               style: Theme.of(
                 context,
-              ).textTheme.labelSmall?.copyWith(color: AppColors.primaryDark),
+              ).textTheme.labelSmall?.copyWith(color: AppColors.primaryText),
             ),
           ],
         ),
@@ -548,7 +549,7 @@ class DiscountMilestoneProgress extends StatelessWidget {
               ? 'Maximum ${group.maximumDiscount}% saving unlocked'
               : '$needed more ${needed == 1 ? 'person' : 'people'} needed to unlock ${group.maximumDiscount}%',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.primaryDark,
+            color: AppColors.primaryText,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -592,7 +593,11 @@ class DiscountMilestoneProgress extends StatelessWidget {
                       ),
                     ),
                     child: complete
-                        ? const Icon(Icons.check, size: 13, color: Colors.white)
+                        ? const Icon(
+                            Icons.check,
+                            size: 13,
+                            color: AppColors.onPrimary,
+                          )
                         : Center(
                             child: Text(
                               '${milestone.$1}',
@@ -749,7 +754,7 @@ class FloatingHomeNavigation extends StatelessWidget {
             border: Border.all(color: AppColors.border),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x1A075E54),
+                color: Color(0x1A064E52),
                 blurRadius: 22,
                 offset: Offset(0, 7),
               ),
@@ -867,7 +872,7 @@ class _NavigationItem extends StatelessWidget {
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontSize: 9.5,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-              color: selected ? AppColors.primary : AppColors.textSecondary,
+              color: selected ? AppColors.primaryText : AppColors.textSecondary,
             ),
           ),
         ],
@@ -916,7 +921,7 @@ class _ModeActionState extends State<_ModeAction> {
               borderRadius: BorderRadius.circular(99),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x260F8B7E),
+                  color: Color(0x2617E6DB),
                   blurRadius: 10,
                   offset: Offset(0, 4),
                 ),
@@ -934,7 +939,7 @@ class _ModeActionState extends State<_ModeAction> {
                           : Icons.shopping_cart_outlined,
                       key: ValueKey(widget.mode),
                       size: widget.compact ? 17 : 19,
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                     ),
                   ),
                   SizedBox(width: widget.compact ? 4 : 6),
@@ -948,7 +953,7 @@ class _ModeActionState extends State<_ModeAction> {
                         overflow: TextOverflow.fade,
                         softWrap: false,
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                           fontSize: widget.compact ? 10.5 : 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -964,7 +969,7 @@ class _ModeActionState extends State<_ModeAction> {
                     ),
                     child: const Icon(
                       Icons.arrow_forward_rounded,
-                      color: AppColors.primary,
+                      color: AppColors.primaryText,
                       size: 20,
                     ),
                   ),

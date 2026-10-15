@@ -91,7 +91,7 @@ class AppLocationHeader extends StatelessWidget {
                         fontSize: 10,
                         letterSpacing: 0,
                         color: grocery
-                            ? AppColors.primaryDark
+                            ? AppColors.primaryText
                             : AppColors.textMuted,
                       ),
                     ),
@@ -101,7 +101,7 @@ class AppLocationHeader extends StatelessWidget {
                         const Icon(
                           Icons.location_on_rounded,
                           size: 18,
-                          color: AppColors.primaryDark,
+                          color: AppColors.primaryText,
                         ),
                         const SizedBox(width: 4),
                         Flexible(
@@ -238,7 +238,7 @@ class PremiumCategoryTile extends StatelessWidget {
                         categoryIcon(iconKey),
                         size: 30,
                         color: selected
-                            ? AppColors.primaryDark
+                            ? AppColors.primaryText
                             : AppColors.textPrimary,
                       )
                     : AppNetworkImage(
@@ -254,7 +254,9 @@ class PremiumCategoryTile extends StatelessWidget {
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: selected ? AppColors.primary : AppColors.textPrimary,
+                  color: selected
+                      ? AppColors.primaryText
+                      : AppColors.textPrimary,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -363,7 +365,7 @@ class PremiumFeatureBanner extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFFD5F2ED)),
+                              ?.copyWith(color: const Color(0xFFCFFAF7)),
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
@@ -372,7 +374,7 @@ class PremiumFeatureBanner extends StatelessWidget {
                             onPressed: onAction,
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor: AppColors.primaryDark,
+                              foregroundColor: AppColors.primaryText,
                               minimumSize: const Size(44, 36),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -419,7 +421,7 @@ class BenefitRow extends StatelessWidget {
               color: AppColors.primaryLight,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 17, color: AppColors.primaryDark),
+            child: Icon(icon, size: 17, color: AppColors.primaryText),
           ),
           const SizedBox(height: 5),
           Text(
@@ -442,7 +444,7 @@ class BenefitRow extends StatelessWidget {
             color: AppColors.primaryLight,
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 17, color: AppColors.primaryDark),
+          child: Icon(icon, size: 17, color: AppColors.primaryText),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -512,7 +514,7 @@ class WelcomeHeroComposition extends StatelessWidget {
                   ),
                   child: const Icon(
                     Icons.delivery_dining_rounded,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                     size: 30,
                   ),
                 ),
@@ -525,7 +527,7 @@ class WelcomeHeroComposition extends StatelessWidget {
                 label: 'Save ₹72 together',
                 icon: Icons.savings_outlined,
                 background: AppColors.surface,
-                foreground: AppColors.primaryDark,
+                foreground: AppColors.primaryText,
               ),
             ),
             const Positioned(left: 20, bottom: 20, child: _MiniAvatarStack()),
@@ -573,7 +575,7 @@ class _HeroImageCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: AppColors.primaryDark),
+              Icon(icon, size: 14, color: AppColors.primaryText),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
@@ -618,7 +620,7 @@ class _MiniAvatarStack extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                   ),
                 ),
               ),

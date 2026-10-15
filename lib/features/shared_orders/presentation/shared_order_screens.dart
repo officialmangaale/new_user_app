@@ -484,9 +484,13 @@ class _MilestoneIndicator extends StatelessWidget {
               radius: 16,
               backgroundColor: unlocked
                   ? AppColors.primary
-                  : const Color(0xFFE5E7EB),
+                  : AppColors.disabledBackground,
               child: unlocked
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  ? const Icon(
+                      Icons.check,
+                      size: 16,
+                      color: AppColors.onPrimary,
+                    )
                   : Text(
                       step.$1,
                       style: const TextStyle(
@@ -612,7 +616,7 @@ class _CreateSharedOrderScreenState
                     grocery
                         ? Icons.shopping_basket_outlined
                         : Icons.restaurant_outlined,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -766,7 +770,7 @@ class _WaitingRoomScreenState extends ConsumerState<WaitingRoomScreen> {
                 ),
                 const Text(
                   'until the group closes',
-                  style: TextStyle(color: Color(0xFFBCECE5)),
+                  style: TextStyle(color: Color(0xFFBDF5F2)),
                 ),
                 const SizedBox(height: 18),
                 DiscountProgressBar(group: group),
@@ -797,7 +801,7 @@ class _WaitingRoomScreenState extends ConsumerState<WaitingRoomScreen> {
               title: Text(participant.name),
               subtitle: Text(participant.isHost ? 'Host' : 'Joined'),
               trailing: participant.isHost
-                  ? const Icon(Icons.star_rounded, color: AppColors.primary)
+                  ? const Icon(Icons.star_rounded, color: AppColors.primaryText)
                   : const Icon(
                       Icons.check_circle_rounded,
                       color: AppColors.success,

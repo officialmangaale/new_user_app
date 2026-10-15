@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET was only declared in the debug/profile manifests, so a release
+         build had no guaranteed network permission. POST_NOTIFICATIONS is the
+         Android 13+ runtime permission push_notification_service requests. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- Coarse/fine location scope restaurant discovery and delivery pricing.
          Location is optional: the app falls back to non-located browsing when
          permission is denied. -->

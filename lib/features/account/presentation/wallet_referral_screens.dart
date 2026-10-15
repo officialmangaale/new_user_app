@@ -66,7 +66,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                   const Text(
                     'AVAILABLE BALANCE',
                     style: TextStyle(
-                      color: Color(0xFFBCECE5),
+                      color: Color(0xFFBDF5F2),
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1.1,
@@ -99,7 +99,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                       ),
                     ],
                   ),
-                  const Divider(color: Color(0x3355E1D1), height: 30),
+                  const Divider(color: Color(0x3317E6DB), height: 30),
                   // Derived from the ledger the backend returned — the API
                   // does not send a pre-aggregated breakdown, so nothing here
                   // is invented.
@@ -263,7 +263,7 @@ class _WalletStat extends StatelessWidget {
       const SizedBox(height: 2),
       Text(
         label,
-        style: const TextStyle(color: Color(0xFFBCECE5), fontSize: 10),
+        style: const TextStyle(color: Color(0xFFBDF5F2), fontSize: 10),
       ),
     ],
   );
@@ -354,7 +354,7 @@ class ReferralScreen extends ConsumerWidget {
                   backgroundColor: AppColors.primary,
                   child: Icon(
                     Icons.card_giftcard_rounded,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                     size: 35,
                   ),
                 ),
@@ -370,7 +370,7 @@ class ReferralScreen extends ConsumerWidget {
                 const Text(
                   'Earn ₹1 every time your referred friend completes an eligible order—for a lifetime.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFFD2F4EF), height: 1.4),
+                  style: TextStyle(color: Color(0xFFCFFAF7), height: 1.4),
                 ),
                 const SizedBox(height: 20),
                 Container(
@@ -562,7 +562,7 @@ class _Rule extends StatelessWidget {
       children: [
         const Icon(
           Icons.check_circle_rounded,
-          color: AppColors.primary,
+          color: AppColors.primaryText,
           size: 19,
         ),
         const SizedBox(width: 9),

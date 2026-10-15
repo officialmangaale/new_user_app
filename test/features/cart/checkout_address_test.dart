@@ -168,7 +168,9 @@ void main() {
 
   Future<Result<PlacedOrder>> place(ProviderContainer container) async {
     await container.read(cartBillProvider.future);
-    return container.read(checkoutViewModelProvider.notifier).placeOrder(idempotencyKey: 'k', paymentMethod: 'cash');
+    return container
+        .read(checkoutViewModelProvider.notifier)
+        .placeOrder(idempotencyKey: 'k', paymentMethod: 'cash');
   }
 
   // An order to "Home" placed from the office used to be pinned at the office.
@@ -196,8 +198,10 @@ void main() {
     expect(orders.orders.single['area'], 'Sector 49');
   });
 
+  // The address text and the pin must be the same place. An unpinned "Home"
+  // used to be ordered to wherever the phone happened to be.
   test(
-    'an address saved without a pin falls back to the phone location',
+    'an address saved without a pin is never given the phone location',
     () async {
       final orders = _RecordingOrdersRepository();
       const manual = CustomerAddress(
@@ -214,11 +218,37 @@ void main() {
 
       final result = await place(container);
 
-      expect(result.isSuccess, isTrue);
-      expect(orders.orders.single['lat'], _office.latitude);
-      expect(orders.orders.single['line1'], '12 MG Road');
+      expect(result.isFailure, isTrue);
+      expect(
+        result.failureOrNull?.message,
+        contains('needs location confirmation'),
+      );
+      expect(orders.orders, isEmpty);
+      expect(gpsReads, 0, reason: 'GPS is not substituted for the pin');
     },
   );
+
+  test('a (0, 0) pin is not a usable pin', () async {
+    final orders = _RecordingOrdersRepository();
+    const zero = CustomerAddress(
+      id: 'z',
+      label: 'Home',
+      addressLine1: '12 MG Road',
+      area: 'Indiranagar',
+      city: 'Bengaluru',
+      pincode: '560038',
+      isDefault: true,
+      latitude: 0,
+      longitude: 0,
+    );
+    final container = build(orders, [zero], device: _office);
+    addTearDown(container.dispose);
+
+    final result = await place(container);
+
+    expect(result.isFailure, isTrue);
+    expect(orders.orders, isEmpty);
+  });
 
   test(
     'no pin and no location blocks the order with a clear message',

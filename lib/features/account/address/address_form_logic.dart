@@ -14,7 +14,7 @@ abstract final class AddressCopy {
   static const areaRequired = 'Please enter your area or locality.';
   static const pincodeInvalid = 'Please enter a valid 6-digit pincode.';
   static const locationDenied =
-      'Location permission is off. You can still enter your address manually.';
+      'Location permission is off. You can still search for your address and pick it from the results.';
   static const locationDeniedForever =
       'Location permission is blocked. Allow it in Settings, or enter your address manually.';
   static const gpsOff = 'Turn on device location to use current location.';
@@ -31,6 +31,8 @@ abstract final class AddressCopy {
   static const authExpired = 'Please log in again to save your address.';
   static const saveFailed =
       'We could not save your address right now. Please try again.';
+  static const locationRequired =
+      'Pin your delivery location first: tap "Use current location" or search for your address. We need it to calculate delivery charges.';
   static const locationInvalid =
       'The pinned location looks wrong. Refresh it or remove it, then save.';
 }

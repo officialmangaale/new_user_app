@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:turquoise_delivery/core/error/result.dart';
 import 'package:turquoise_delivery/core/services/api_client.dart';
 import 'package:turquoise_delivery/core/services/location_service.dart';
@@ -160,6 +161,11 @@ ProviderContainer _containerWith(
 }
 
 void main() {
+  // Discovery now reads the canonical delivery location, which reads the
+  // signed-in state (local storage); give the plain-Dart container a binding.
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   group('CatalogRepositoryImpl nearby grocery', () {
     test('products page reads shop details and has_more', () async {
       final (repo, adapter) = _repositoryServing({

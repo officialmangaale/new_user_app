@@ -241,7 +241,9 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
           .map(
             (json) => HomeCategory(
               key: readString(json, const ['key', 'category_key', 'slug']),
-              name: readString(json, const ['name', 'category_name', 'title']),
+              name: cleanCategoryName(
+                readString(json, const ['name', 'category_name', 'title']),
+              ),
               imageUrl: readString(json, const ['image_url', 'imageUrl']),
               icon: readString(json, const ['icon']),
               itemCount: readInt(json, const ['item_count', 'itemCount']),
@@ -500,7 +502,7 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       cuisine: _readCuisine(json),
       rating: readDouble(json, const ['average_rating', 'rating']),
       deliveryMinutes: _readDeliveryMinutes(json),
-      distanceKm: readDouble(json, const ['distance_km', 'distance']),
+      distanceKm: readDistanceKm(json),
       deliveryFee: readDouble(json, const [
         'delivery_fee',
         'delivery_charge',
@@ -517,12 +519,39 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
         'background_image_url',
         'logo_url',
       ]),
+      logoUrl: readString(json, const ['logo_url', 'logo']),
+      coverUrl: _readCoverUrl(json),
+      isOpen: _readOpenState(json),
+      opensAt: readString(json, const [
+        'opens_at',
+        'next_open_time',
+        'opening_time',
+        'open_time',
+      ]),
+      costForTwo: readDouble(json, const [
+        'cost_for_two',
+        'average_cost_for_two',
+        'avg_cost_for_two',
+      ]).round(),
+      area: readString(json, const ['area', 'locality', 'neighbourhood']),
+      offerText: readString(json, const [
+        'offer_text',
+        'offer_badge',
+        'offer_title',
+      ]),
       foodShare: readBool(json, const [
         'food_share',
         'foodshare',
         'is_food_share_enabled',
       ]),
     );
+  }
+
+  /// A number only when the API supplied a real positive one; 0 and missing
+  /// both mean "no rating yet".
+  static double? _optionalPositive(Object? value) {
+    final number = value is num ? value.toDouble() : null;
+    return number != null && number.isFinite && number > 0 ? number : null;
   }
 
   CatalogItem _catalogItem(
@@ -552,6 +581,14 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       ], orElse: true),
       hasVariants: readBool(json, const ['has_variants']),
       hasAddons: readBool(json, const ['has_addons']),
+      isBestseller: readBool(json, const ['is_bestseller', 'bestseller']),
+      storeLogoUrl: readString(json, const ['restaurant_logo', 'store_logo']),
+      storeDistanceKm: readDistanceKm(json),
+      storeDeliveryTime: readString(json, const ['delivery_time']),
+      storeRating: _optionalPositive(json['rating']),
+      storeIsOpen: json['restaurant_is_open'] is bool
+          ? json['restaurant_is_open'] as bool
+          : null,
       variants: readList(json, 'variants')
           .map(
             (variant) => MenuVariant(
@@ -590,7 +627,7 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
       'item_count',
     ]);
     final description = readString(json, const ['description']);
-    final distance = readDouble(json, const ['distance_km', 'distance']);
+    final distance = readDistanceKm(json);
     return Restaurant(
       id: readString(json, const ['grocery_merchant_id', 'merchant_id', 'id']),
       name: readString(json, const ['name', 'store_name']),
@@ -651,6 +688,36 @@ class CatalogRepositoryImpl implements CatalogRepositoryInterface {
 // -----------------------------------------------------------------------
 // mapping helpers
 // -----------------------------------------------------------------------
+
+/// Fixes the stray possessive apostrophe some category rows carry
+/// ("Burger's" -> "Burgers"). Only single-word names are touched, so a real
+/// possessive such as "Mom's Kitchen" is left alone.
+String cleanCategoryName(String raw) {
+  final name = raw.trim();
+  final match = RegExp(r"^(\p{L}+)[’']s$", unicode: true).firstMatch(name);
+  return match == null ? name : '${match.group(1)}s';
+}
+
+/// Cover photo, falling back to `image_url` only when it is not the logo.
+String _readCoverUrl(Map<String, dynamic> json) {
+  final cover = readString(json, const [
+    'cover_image_url',
+    'banner_url',
+    'background_image_url',
+  ]);
+  if (cover.isNotEmpty) return cover;
+  final image = readString(json, const ['image_url']);
+  final logo = readString(json, const ['logo_url', 'logo']);
+  return image == logo ? '' : image;
+}
+
+/// `true`/`false` when the API states it, `null` when it says nothing.
+bool? _readOpenState(Map<String, dynamic> json) {
+  for (final key in const ['is_open', 'is_accepting_orders']) {
+    if (json[key] is bool) return json[key] as bool;
+  }
+  return null;
+}
 
 String _readCuisine(Map<String, dynamic> json) {
   for (final key in const ['cuisine_types', 'cuisines']) {

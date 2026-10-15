@@ -1,11 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/di_providers.dart';
-import '../../../core/services/api_exception.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/repositories/account_repository.dart';
-import '../../app_state/providers/location_providers.dart';
 import '../../cart/providers/cart_controller.dart';
+import '../../cart/providers/delivery_location.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../data/repositories/orders_repository_impl.dart';
 import '../domain/repositories/orders_repository_interface.dart';
@@ -173,42 +172,26 @@ final cartBillProvider = FutureProvider<BillSummary>((ref) async {
   final cart = ref.watch(cartControllerProvider);
   final lines = ref.watch(cartLinesProvider);
   final coupon = ref.watch(cartCouponProvider);
-  final authenticated = ref.watch(
-    appControllerProvider.select((s) => s.authenticated),
-  );
   final foodValidator = ref.watch(validateCartUseCaseProvider);
   final groceryValidator = ref.watch(validateGroceryCartUseCaseProvider);
   // Register dependencies before any async gap.
-  final addressesFuture = authenticated
-      ? ref.watch(addressesProvider.future)
-      : null;
-  final locationFuture = ref.watch(currentLocationProvider.future);
+  final targetFuture = ref.watch(deliveryLocationProvider.future);
   if (lines.isEmpty) throw StateError('Your cart is empty.');
-  final List<CustomerAddress> addresses;
-  try {
-    addresses = addressesFuture == null
-        ? const <CustomerAddress>[]
-        : await addressesFuture;
-  } on ApiException catch (error) {
-    if (error.isAuthError) {
-      throw StateError(
-        'Your session has expired. Please login again to continue checkout.',
-      );
-    }
-    rethrow;
+  final target = await targetFuture;
+  // Pricing is requested only for a location with a usable pin. A saved
+  // address without one is never priced from its text, and the device GPS is
+  // never silently substituted for it.
+  final DeliveryLocation location;
+  switch (target) {
+    case DeliveryLocationResolved(location: final resolved):
+      location = resolved;
+    case DeliveryLocationNeedsConfirmation(:final address):
+      throw DeliveryLocationRequired(address);
+    case DeliveryLocationUnavailable():
+      throw const DeliveryLocationRequired(null);
   }
-  final address =
-      addresses.where((a) => a.isDefault).firstOrNull ?? addresses.firstOrNull;
-  final location = address?.hasPin == true ? null : await locationFuture;
-  final latitude = address?.hasPin == true
-      ? address!.latitude
-      : location?.latitude;
-  final longitude = address?.hasPin == true
-      ? address!.longitude
-      : location?.longitude;
-  if (latitude == null || longitude == null) {
-    throw StateError('Please select a delivery address with location pin.');
-  }
+  final latitude = location.latitude;
+  final longitude = location.longitude;
   final grocery = lines.first.item.type == CatalogItemType.grocery;
   final result = grocery
       ? await groceryValidator(

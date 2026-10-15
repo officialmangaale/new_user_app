@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/error/result.dart';
-import '../../app_state/providers/location_providers.dart';
+import '../../cart/providers/delivery_location.dart';
 import '../../authentication/providers/auth_providers.dart';
 import '../data/repositories/catalog_repository_impl.dart';
 import '../domain/entities/catalog_entities.dart';
@@ -42,7 +42,7 @@ T _unwrap<T>(Result<T> result) {
 
 /// Home feed, scoped to the device location when one is available.
 final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   final result = await ref
       .watch(fetchHomeFeedUseCaseProvider)
       .call(lat: location?.latitude, lng: location?.longitude);
@@ -50,7 +50,7 @@ final homeFeedProvider = FutureProvider<HomeFeed>((ref) async {
 });
 
 final restaurantsProvider = FutureProvider<List<Restaurant>>((ref) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   final result = await ref
       .watch(fetchRestaurantsUseCaseProvider)
       .call(lat: location?.latitude, lng: location?.longitude);
@@ -58,7 +58,7 @@ final restaurantsProvider = FutureProvider<List<Restaurant>>((ref) async {
 });
 
 final groceryMerchantsProvider = FutureProvider<List<Restaurant>>((ref) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) return const <Restaurant>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
@@ -75,7 +75,7 @@ const _groceryResultsLimit = 50;
 
 /// Home category rail, scoped to the device location when available.
 final categoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   final result = await ref
       .watch(fetchCategoriesUseCaseProvider)
       .call(lat: location?.latitude, lng: location?.longitude);
@@ -84,7 +84,7 @@ final categoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
 
 /// Grocery categories from every nearby shop, merged by name.
 final groceryCategoriesProvider = FutureProvider<List<HomeCategory>>((ref) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) return const <HomeCategory>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
@@ -100,7 +100,7 @@ final categoryItemsProvider = FutureProvider.family<List<CatalogItem>, String>((
   ref,
   categoryKey,
 ) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   final result = await ref
       .watch(fetchCategoryItemsUseCaseProvider)
       .call(
@@ -115,7 +115,7 @@ final categoryItemsProvider = FutureProvider.family<List<CatalogItem>, String>((
 final nearbyGroceryProductsProvider = FutureProvider<List<CatalogItem>>((
   ref,
 ) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
@@ -130,7 +130,7 @@ final nearbyGroceryProductsProvider = FutureProvider<List<CatalogItem>>((
 /// the category key from [groceryCategoriesProvider].
 final groceryCategoryItemsProvider =
     FutureProvider.family<List<CatalogItem>, String>((ref, categoryKey) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
@@ -147,7 +147,7 @@ final grocerySearchResultsProvider =
     FutureProvider.family<List<CatalogItem>, String>((ref, query) async {
   final trimmed = query.trim();
   if (trimmed.length < 2) return const <CatalogItem>[];
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) return const <CatalogItem>[];
   final result = await ref
       .watch(catalogRepositoryProvider)
@@ -164,7 +164,7 @@ final grocerySearchResultsProvider =
 /// home rail resolve.
 final groceryProductDetailProvider =
     FutureProvider.family<CatalogItem, String>((ref, productId) async {
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   if (location == null) {
     throw Exception('Turn on location to see grocery products near you.');
   }
@@ -199,7 +199,7 @@ final catalogSearchResultsProvider =
       restaurants: <Restaurant>[],
     );
   }
-  final location = await ref.watch(currentLocationProvider.future);
+  final location = await ref.watch(discoveryCoordinatesProvider.future);
   final result = await ref
       .watch(catalogRepositoryProvider)
       .searchCatalog(trimmed, lat: location?.latitude, lng: location?.longitude);

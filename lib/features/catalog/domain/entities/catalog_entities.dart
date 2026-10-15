@@ -12,6 +12,13 @@ class Restaurant {
     required this.discount,
     required this.imageUrl,
     this.foodShare = false,
+    this.logoUrl = '',
+    this.coverUrl = '',
+    this.isOpen,
+    this.opensAt = '',
+    this.costForTwo = 0,
+    this.area = '',
+    this.offerText = '',
   });
 
   final String id;
@@ -19,11 +26,46 @@ class Restaurant {
   final String cuisine;
   final double rating;
   final int deliveryMinutes;
-  final double distanceKm;
+  /// Distance from the selected delivery location, or null when it could not
+  /// be calculated (no delivery location yet, or the restaurant has no
+  /// coordinates). Never 0 as a stand-in for "unknown".
+  final double? distanceKm;
   final int deliveryFee;
   final int discount;
   final String imageUrl;
   final bool foodShare;
+
+  /// Restaurant logo, when the API ships one separately from the cover photo.
+  final String logoUrl;
+
+  /// Cover/banner photo. Empty when the API only supplied a single image.
+  final String coverUrl;
+
+  /// `null` when the API does not say; only an explicit `false` means closed.
+  final bool? isOpen;
+
+  /// Display text for the next opening time, e.g. `11:00`. May be empty.
+  final String opensAt;
+  final int costForTwo;
+  final String area;
+
+  /// Offer headline such as "20% OFF up to ₹100". May be empty.
+  final String offerText;
+
+  /// Photo suited to a wide card: the cover when there is one, otherwise the
+  /// legacy single image unless that image is the logo (a logo cropped to a
+  /// banner looks broken). Empty when there is nothing suitable.
+  String get displayCoverUrl {
+    if (coverUrl.isNotEmpty) return coverUrl;
+    if (imageUrl.isNotEmpty && imageUrl != logoUrl) return imageUrl;
+    return '';
+  }
+
+  /// Offer text for badges, or empty when the restaurant has no offer.
+  String get displayOffer {
+    if (offerText.trim().isNotEmpty) return offerText.trim();
+    return discount > 0 ? '$discount% OFF' : '';
+  }
 }
 
 /// A selectable size/option on a menu item (for example Regular vs Large).
@@ -78,6 +120,12 @@ class CatalogItem {
     this.isAvailable = true,
     this.hasVariants = false,
     this.hasAddons = false,
+    this.isBestseller = false,
+    this.storeLogoUrl = '',
+    this.storeDistanceKm,
+    this.storeDeliveryTime = '',
+    this.storeRating,
+    this.storeIsOpen,
   });
 
   final String id;
@@ -112,6 +160,28 @@ class CatalogItem {
   /// only the payload when the endpoint happened to include it.
   final bool hasVariants;
   final bool hasAddons;
+
+  /// Merchandising flag set by the restaurant; drives the "Bestseller" tag.
+  final bool isBestseller;
+
+  // The restaurant this dish belongs to, as category/search rows describe it.
+  // All optional: a row that does not say leaves them empty rather than
+  // guessing, and nothing orders or prices from them.
+
+  /// Restaurant logo, or empty.
+  final String storeLogoUrl;
+
+  /// Distance from the selected delivery location; null when unknown.
+  final double? storeDistanceKm;
+
+  /// Display text such as "25-30 min"; empty when unknown.
+  final String storeDeliveryTime;
+
+  /// Restaurant rating; null when it has none yet.
+  final double? storeRating;
+
+  /// Null when the row does not say; only an explicit false means closed.
+  final bool? storeIsOpen;
 
   /// True when the customer must pick something before this can be ordered.
   bool get needsCustomisation =>

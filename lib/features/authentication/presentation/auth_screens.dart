@@ -75,16 +75,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               Text(
                 'turquoise',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
+                  color: AppColors.onPrimary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 'Food, groceries & savings — together.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFFE6FFFB),
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: AppColors.onPrimary),
               ),
             ],
           ),
@@ -198,7 +198,10 @@ class _BrandMark extends StatelessWidget {
             color: AppColors.primary,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.delivery_dining_rounded, color: Colors.white),
+          child: const Icon(
+            Icons.delivery_dining_rounded,
+            color: AppColors.onPrimary,
+          ),
         ),
         const SizedBox(width: 9),
         const Flexible(
@@ -329,7 +332,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TextSpan(
                       text: 'Terms & Conditions',
                       style: const TextStyle(
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         decoration: TextDecoration.underline,
                       ),
                       recognizer: TapGestureRecognizer()
@@ -339,7 +342,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TextSpan(
                       text: 'Privacy Policy',
                       style: const TextStyle(
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         decoration: TextDecoration.underline,
                       ),
                       recognizer: TapGestureRecognizer()
@@ -635,7 +638,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   child: Icon(
                     Icons.camera_alt_rounded,
                     size: 17,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                   ),
                 ),
               ),
@@ -746,7 +749,7 @@ class _PreferenceCard extends StatelessWidget {
               const Icon(
                 Icons.arrow_forward_ios_rounded,
                 size: 18,
-                color: AppColors.primary,
+                color: AppColors.primaryText,
               ),
             ],
           ),

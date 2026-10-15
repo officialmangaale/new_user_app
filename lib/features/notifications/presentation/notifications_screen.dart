@@ -51,11 +51,11 @@ class NotificationsScreen extends ConsumerWidget {
                     leading: CircleAvatar(
                       backgroundColor: item.unread
                           ? AppColors.primary
-                          : const Color(0xFFF1F3F4),
+                          : AppColors.disabledBackground,
                       child: Icon(
                         icon,
                         color: item.unread
-                            ? Colors.white
+                            ? AppColors.onPrimary
                             : AppColors.textSecondary,
                       ),
                     ),

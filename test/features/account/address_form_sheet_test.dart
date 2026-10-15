@@ -158,9 +158,30 @@ void main() {
     await tester.enterText(field, text);
   }
 
+  /// Pins the address from the (fake) device location, as the customer does
+  /// with "Use current location". Delivery pricing needs the pin, so the form
+  /// no longer saves an address without one.
+  Future<void> pinAddress(WidgetTester tester) async {
+    if (location.result.location == null) {
+      location.result = LocationCaptureResult.captured(
+        CapturedLocation(
+          latitude: 28.4089,
+          longitude: 77.0532,
+          accuracyMeters: 25,
+          capturedAt: DateTime(2026, 9, 11),
+        ),
+      );
+    }
+    final button = find.byKey(const Key('address-use-location'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+  }
+
   Future<void> fillValidAddress(
     WidgetTester tester, {
     String pin = '560038',
+    bool pinned = true,
   }) async {
     await enter(tester, 'address-house', '108');
     await enter(tester, 'address-area', 'Sector 49');
@@ -168,6 +189,7 @@ void main() {
     // Past the pincode debounce.
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
+    if (pinned) await pinAddress(tester);
   }
 
   Future<void> tapSave(WidgetTester tester) async {
@@ -256,7 +278,28 @@ void main() {
       expect((await sheetResult)?.id, 'a1');
     });
 
-    testWidgets('a manual address saves without any location', (tester) async {
+    testWidgets('an address without a pin is not saved', (tester) async {
+      await openSheet(tester);
+      await fillValidAddress(tester, pinned: false);
+
+      await tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        repository.added,
+        isEmpty,
+        reason: 'text alone cannot be priced for delivery',
+      );
+      expect(find.text(AddressCopy.locationRequired), findsOneWidget);
+      expect(find.byType(AddressFormSheet), findsOneWidget);
+      expect(
+        location.captures,
+        0,
+        reason: 'GPS is never used unless asked for',
+      );
+    });
+
+    testWidgets('a pinned address saves with its pin and text', (tester) async {
       await openSheet(tester);
       await fillValidAddress(tester);
 
@@ -273,12 +316,9 @@ void main() {
         isTrue,
         reason: 'Deliver my orders here is on by default',
       );
-      expect(sent.hasPin, isFalse);
-      expect(
-        location.captures,
-        0,
-        reason: 'GPS is never used unless asked for',
-      );
+      expect(sent.hasPin, isTrue);
+      expect(sent.latitude, 28.4089);
+      expect(sent.longitude, 77.0532);
     });
 
     testWidgets('a server field error appears on that field', (tester) async {
@@ -352,7 +392,7 @@ void main() {
   });
 
   group('current location', () {
-    testWidgets('permission denied is explained and manual save still works', (
+    testWidgets('permission denied is explained and save asks for a pin', (
       tester,
     ) async {
       await openSheet(tester);
@@ -362,11 +402,12 @@ void main() {
 
       expect(find.text(AddressCopy.locationDenied), findsOneWidget);
 
-      await fillValidAddress(tester);
+      await fillValidAddress(tester, pinned: false);
       await tapSave(tester);
       await tester.pumpAndSettle();
 
-      expect(repository.added.single.hasPin, isFalse);
+      expect(repository.added, isEmpty);
+      expect(find.text(AddressCopy.locationRequired), findsOneWidget);
     });
 
     testWidgets('GPS off offers the location settings', (tester) async {
@@ -398,7 +439,7 @@ void main() {
       await tester.pump();
       expect(find.text('Location pinned'), findsOneWidget);
 
-      await fillValidAddress(tester);
+      await fillValidAddress(tester, pinned: false);
       await tapSave(tester);
       await tester.pumpAndSettle();
 
@@ -450,6 +491,7 @@ void main() {
         reason: 'an empty area takes the post office as a suggestion',
       );
 
+      await pinAddress(tester);
       await tapSave(tester);
       await tester.pumpAndSettle();
       final sent = repository.added.single;

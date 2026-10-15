@@ -406,6 +406,17 @@ class DashboardSummary {
   final int totalSavings;
 }
 
+/// Whether a latitude/longitude pair can be priced from. Same rule as the
+/// restaurant-service resolver (`validDeliveryCoordinate`).
+bool isUsableCoordinate(double? latitude, double? longitude) {
+  if (latitude == null || longitude == null) return false;
+  if (latitude.isNaN || longitude.isNaN) return false;
+  if (latitude.isInfinite || longitude.isInfinite) return false;
+  if (latitude < -90 || latitude > 90) return false;
+  if (longitude < -180 || longitude > 180) return false;
+  return !(latitude == 0 && longitude == 0);
+}
+
 class CustomerAddress {
   const CustomerAddress({
     required this.id,
@@ -421,6 +432,7 @@ class CustomerAddress {
     this.landmark = '',
     this.district = '',
     this.locationAccuracyMeters,
+    this.receiverName = '',
   });
 
   final String id;
@@ -444,20 +456,71 @@ class CustomerAddress {
   final String district;
   final double? locationAccuracyMeters;
 
-  bool get hasPin => latitude != null && longitude != null;
+  /// Who receives the order at the door. Optional; stored by user-service as
+  /// the address `name`.
+  final String receiverName;
 
-  String get singleLine => [
-    addressLine1,
-    area,
-    city,
-    pincode,
-  ].where((part) => part.isNotEmpty).join(', ');
+  /// True only for a pin delivery pricing can use. Mirrors the backend's
+  /// rule: finite, in range, and not (0, 0) - the "never set" value. A pair
+  /// of non-null numbers is not enough.
+  bool get hasPin => isUsableCoordinate(latitude, longitude);
+
+  /// This address with a new pin; every text field is kept as typed.
+  CustomerAddress withPin({
+    required double latitude,
+    required double longitude,
+    double? accuracyMeters,
+  }) {
+    return CustomerAddress(
+      id: id,
+      label: label,
+      addressLine1: addressLine1,
+      area: area,
+      city: city,
+      pincode: pincode,
+      isDefault: isDefault,
+      latitude: latitude,
+      longitude: longitude,
+      state: state,
+      landmark: landmark,
+      district: district,
+      locationAccuracyMeters: accuracyMeters,
+      receiverName: receiverName,
+    );
+  }
+
+  /// A saved address with text but no usable pin cannot be priced for
+  /// delivery; the customer must confirm its location first.
+  bool get needsLocationConfirmation => !hasPin;
+
+  /// Meaningful parts only, each once. Blank parts are dropped and repeated
+  /// parts (case-insensitive) are collapsed; nothing is invented.
+  String get singleLine {
+    final seen = <String>{};
+    final parts = <String>[];
+    for (final raw in [addressLine1, area, city, state, pincode]) {
+      final part = raw.trim();
+      if (part.isEmpty || !seen.add(part.toLowerCase())) continue;
+      parts.add(part);
+    }
+    return parts.join(', ');
+  }
 
   factory CustomerAddress.fromJson(Map<String, dynamic> json) {
     double? number(String key) {
       final value = json[key];
       if (value is num) return value.toDouble();
-      if (value is String) return double.tryParse(value);
+      if (value is String) return double.tryParse(value.trim());
+      return null;
+    }
+
+    // The API names the pin latitude/longitude; accept the short forms too so
+    // a field-name mismatch can never silently drop a saved pin.
+    double? firstNumber(List<String> keys) {
+      for (final key in keys) {
+        final value = number(key);
+        if (value != null) return value;
+      }
       return null;
     }
 
@@ -473,12 +536,13 @@ class CustomerAddress {
       city: readString(json, const ['city']),
       pincode: readString(json, const ['pincode', 'postal_code', 'zip']),
       isDefault: readBool(json, const ['is_default', 'default']),
-      latitude: number('latitude'),
-      longitude: number('longitude'),
+      latitude: firstNumber(const ['latitude', 'lat']),
+      longitude: firstNumber(const ['longitude', 'lng', 'lon', 'long']),
       state: readString(json, const ['state']),
       landmark: readString(json, const ['landmark']),
       district: readString(json, const ['district']),
       locationAccuracyMeters: number('location_accuracy_meters'),
+      receiverName: readString(json, const ['name', 'receiver_name']),
     );
   }
 
@@ -494,6 +558,7 @@ class CustomerAddress {
     'landmark': landmark,
     'district': district,
     'is_default': isDefault,
+    if (receiverName.trim().isNotEmpty) 'name': receiverName.trim(),
     if (hasPin) ...{
       'latitude': latitude,
       'longitude': longitude,

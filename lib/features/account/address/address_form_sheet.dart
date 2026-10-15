@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,9 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../core/maps/map_capabilities.dart';
+import '../../../core/services/reverse_geocoding_service.dart';
 import '../../../shared/repositories/account_repository.dart';
+import '../../app_state/providers/location_providers.dart';
+import '../../cart/providers/delivery_location.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'address_form_logic.dart';
+import 'places_search_session.dart';
 import 'address_location_capture.dart';
 import 'address_map_picker_sheet.dart';
 import 'address_providers.dart';
@@ -47,6 +50,9 @@ enum _LocationState { none, capturing, captured, failed }
 
 enum _PincodeState { idle, loading, found, notFound, failed }
 
+/// Progress of looking up the address (area, city, state, pincode) for a pin.
+enum _AddressLookup { idle, resolving, resolved, failed }
+
 class AddressFormSheet extends ConsumerStatefulWidget {
   const AddressFormSheet({
     super.key,
@@ -65,7 +71,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   static const _presetLabels = ['Home', 'Work'];
   static const _saveTimeout = Duration(seconds: 25);
   static const _pincodeDebounce = Duration(milliseconds: 400);
-  static const _searchDebounce = Duration(milliseconds: 350);
+  // Autocomplete is billed per request: wait for the customer to pause.
+  static const _searchDebounce = Duration(milliseconds: 500);
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _search;
@@ -74,6 +81,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   late final TextEditingController _street;
   late final TextEditingController _area;
   late final TextEditingController _landmark;
+  late final TextEditingController _receiver;
   late final TextEditingController _pincode;
   late final TextEditingController _city;
   late final TextEditingController _state;
@@ -96,12 +104,16 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   String? _selectedPostOffice;
   String? _autoCity;
   String? _autoState;
+  String? _autoArea;
+  String? _autoPincode;
+  _AddressLookup _addressLookup = _AddressLookup.idle;
+  int _geocodeSeq = 0;
   String _district = '';
   Timer? _pincodeTimer;
   int _lookupSeq = 0;
   Timer? _searchTimer;
   int _searchSeq = 0;
-  String? _placesSessionToken;
+  final PlacesSearchSession _placesSession = PlacesSearchSession();
   List<AddressPlaceSuggestion> _suggestions = const [];
   bool _searching = false;
   String? _searchError;
@@ -125,6 +137,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     _street = TextEditingController();
     _area = TextEditingController(text: existing?.area ?? '');
     _landmark = TextEditingController(text: existing?.landmark ?? '');
+    _receiver = TextEditingController(text: existing?.receiverName ?? '');
     _pincode = TextEditingController(text: existing?.pincode ?? '');
     _city = TextEditingController(text: existing?.city ?? '');
     _state = TextEditingController(text: existing?.state ?? '');
@@ -136,7 +149,35 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       _accuracy = existing.locationAccuracyMeters;
       _locationState = _LocationState.captured;
     }
+    if (existing == null) _prefillFromSelectedLocation();
     _log('address_add_opened edit=$_isEdit');
+  }
+
+  /// A new address starts from the delivery location the customer is already
+  /// using, when that is their current location: its coordinates and geographic
+  /// address are known, so GPS is not asked again and nothing is retyped. A
+  /// saved Home elsewhere is never copied into a new address.
+  void _prefillFromSelectedLocation() {
+    final view = ref.read(deliveryLocationViewProvider);
+    final location = view.location;
+    if (!view.isCurrentLocation || location == null) return;
+    if (!isValidCoordinate(location.latitude, location.longitude)) return;
+    _latitude = location.latitude;
+    _longitude = location.longitude;
+    _accuracy = null;
+    _locationState = _LocationState.captured;
+    final resolved = view.placeAddress;
+    if (resolved != null) {
+      _applyGeocoded(resolved);
+      _addressLookup = _AddressLookup.resolved;
+    } else if (view.addressFailed) {
+      _addressLookup = _AddressLookup.failed;
+    } else {
+      // Coordinates are known; the area is still being looked up.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_resolveAddressFor(location.latitude, location.longitude));
+      });
+    }
   }
 
   @override
@@ -150,6 +191,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       _street,
       _area,
       _landmark,
+      _receiver,
       _pincode,
       _city,
       _state,
@@ -164,30 +206,43 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
 
   // --- location ------------------------------------------------------------
 
-  String _newPlacesSessionToken() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    return '${DateTime.now().microsecondsSinceEpoch}-$hex';
+  /// Whether a Places request may be made right now: this sheet is mounted,
+  /// is the visible route, and the app is in the foreground. Typing can only
+  /// happen then, but a debounce timer can fire after the app is backgrounded
+  /// or another sheet (the map picker) opened on top.
+  bool get _canQueryPlaces {
+    if (!mounted) return false;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
+      return false;
+    }
+    return ModalRoute.of(context)?.isCurrent ?? true;
   }
 
   void _onSearchChanged(String value) {
     _searchTimer?.cancel();
     final query = value.trim();
-    if (query.length < 3) {
-      _searchSeq++;
-      setState(() {
-        _suggestions = const [];
-        _searching = false;
-        _searchError = null;
-      });
-      return;
+    switch (_placesSession.decide(query)) {
+      case PlacesSearchAction.tooShort:
+        _searchSeq++;
+        setState(() {
+          _suggestions = const [];
+          _searching = false;
+          _searchError = null;
+        });
+        return;
+      case PlacesSearchAction.reuseLast:
+        // Same text already answered in this session: no new request.
+        _searchSeq++;
+        setState(() => _searching = false);
+        return;
+      case PlacesSearchAction.search:
+        _searchTimer = Timer(_searchDebounce, () => _searchPlaces(query));
     }
-    _placesSessionToken ??= _newPlacesSessionToken();
-    _searchTimer = Timer(_searchDebounce, () => _searchPlaces(query));
   }
 
   Future<void> _searchPlaces(String query) async {
+    if (!_canQueryPlaces) return;
     final seq = ++_searchSeq;
     setState(() {
       _searching = true;
@@ -196,13 +251,18 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     try {
       final results = await ref.read(accountRepositoryProvider).searchAddressPlaces(
             query: query,
-            sessionToken: _placesSessionToken ??= _newPlacesSessionToken(),
-            latitude: isValidCoordinate(_latitude, _longitude) ? _latitude : null,
-            longitude: isValidCoordinate(_latitude, _longitude) ? _longitude : null,
+            sessionToken: _placesSession.token,
+            latitude: isValidCoordinate(_latitude, _longitude)
+                ? _latitude
+                : null,
+            longitude: isValidCoordinate(_latitude, _longitude)
+                ? _longitude
+                : null,
           );
       if (!mounted || seq != _searchSeq || _search.text.trim() != query) {
         return;
       }
+      _placesSession.recordSearched(query);
       setState(() {
         _suggestions = results;
         _searching = false;
@@ -220,7 +280,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
 
   Future<void> _selectSuggestion(AddressPlaceSuggestion suggestion) async {
     if (_resolvingPlace) return;
-    final token = _placesSessionToken ??= _newPlacesSessionToken();
+    // Same token as the autocomplete requests: Place Details ends the session.
+    final token = _placesSession.token;
     setState(() {
       _resolvingPlace = true;
       _searchError = null;
@@ -232,7 +293,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
           );
       if (!mounted) return;
       _applyResolvedLocation(resolved, updatePin: true);
-      _placesSessionToken = null;
+      _placesSession.end();
       _search.text = suggestion.fullText;
       setState(() {
         _suggestions = const [];
@@ -242,6 +303,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
         await _openMapPicker(
           latitude: resolved.latitude!,
           longitude: resolved.longitude!,
+          initialAddress: resolved.formattedAddress,
         );
       }
     } catch (_) {
@@ -287,6 +349,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   Future<void> _openMapPicker({
     double? latitude,
     double? longitude,
+    String? initialAddress,
   }) async {
     final startLat = latitude ?? _latitude;
     final startLng = longitude ?? _longitude;
@@ -295,6 +358,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       context,
       latitude: startLat!,
       longitude: startLng!,
+      initialAddress: initialAddress,
     );
     if (!mounted || result == null) return;
     setState(() {
@@ -307,6 +371,9 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
         _applyResolvedLocation(result.resolved!, updatePin: false);
       }
     });
+    if (result.resolved == null) {
+      unawaited(_resolveAddressFor(result.latitude, result.longitude));
+    }
   }
 
   Future<void> _captureLocation() async {
@@ -335,6 +402,12 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
             : _LocationState.failed;
       }
     });
+    if (captured != null) {
+      // Coordinates alone leave area, city, state and pincode empty. Resolve
+      // them now, in the background, so the form fills in as soon as the pin
+      // lands; the coordinates are already kept whatever the lookup does.
+      unawaited(_resolveAddressFor(captured!.latitude, captured!.longitude));
+    }
     if (captured != null && ref.read(customerMapPickerAvailableProvider)) {
       await _openMapPicker(
         latitude: captured!.latitude,
@@ -343,8 +416,67 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     }
   }
 
-  void _removeLocation() {
+  Future<void> _resolveAddressFor(double latitude, double longitude) async {
+    final seq = ++_geocodeSeq;
+    setState(() => _addressLookup = _AddressLookup.resolving);
+    PlaceAddress? address;
+    try {
+      address = await ref
+          .read(reverseGeocoderProvider)
+          .reverse(latitude, longitude)
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      address = null;
+    }
+    // A newer pin (or a removed one) supersedes this answer.
+    if (!mounted || seq != _geocodeSeq) return;
     setState(() {
+      if (address != null && address.isMeaningful) {
+        _applyGeocoded(address);
+        _addressLookup = _AddressLookup.resolved;
+      } else {
+        _addressLookup = _AddressLookup.failed;
+      }
+    });
+  }
+
+  /// Fills area, city, state and pincode from a geocoder result.
+  ///
+  /// A field is filled only when it is empty or still holds what an earlier
+  /// lookup filled, so a value the customer typed is never overwritten and a
+  /// refreshed pin updates the fields it filled before. House, street and
+  /// landmark are never touched: only the customer knows the door.
+  void _applyGeocoded(PlaceAddress address) {
+    bool mayFill(TextEditingController controller, String? lastAuto) =>
+        controller.text.trim().isEmpty ||
+        controller.text.trim() == (lastAuto ?? '').trim();
+
+    if (address.area.isNotEmpty && mayFill(_area, _autoArea)) {
+      _area.text = address.area;
+      _autoArea = address.area;
+    }
+    if (address.city.isNotEmpty && mayFill(_city, _autoCity)) {
+      _city.text = address.city;
+      _autoCity = address.city;
+    }
+    if (address.state.isNotEmpty && mayFill(_state, _autoState)) {
+      _state.text = address.state;
+      _autoState = address.state;
+    }
+    if (isCompletePincode(address.postalCode) &&
+        mayFill(_pincode, _autoPincode)) {
+      _pincode.text = address.postalCode;
+      _autoPincode = address.postalCode;
+    }
+    if (address.district.isNotEmpty && _district.isEmpty) {
+      _district = address.district;
+    }
+  }
+
+  void _removeLocation() {
+    _geocodeSeq++;
+    setState(() {
+      _addressLookup = _AddressLookup.idle;
       _latitude = null;
       _longitude = null;
       _accuracy = null;
@@ -444,6 +576,18 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       return;
     }
 
+    // Delivery pricing needs the pin; text alone cannot be priced. Do not save
+    // an address that would only fail at checkout.
+    if (!isValidCoordinate(_latitude, _longitude)) {
+      setState(() {
+        _saveError = const AddressSaveError(
+          AddressCopy.locationRequired,
+          field: AddressField.location,
+        );
+      });
+      return;
+    }
+
     setState(() => _saving = true);
     final repository = ref.read(accountRepositoryProvider);
     final existing = widget.existing;
@@ -457,6 +601,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       ),
       area: _area.text.trim(),
       landmark: _landmark.text.trim(),
+      receiverName: _receiver.text.trim(),
       city: _city.text.trim(),
       state: _state.text.trim(),
       district: _district,
@@ -533,6 +678,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
               state: _locationState,
               failure: _locationFailure,
               accuracy: _accuracy,
+              addressLookup: _addressLookup,
               error: _saveError?.field == AddressField.location
                   ? _saveError!.message
                   : null,
@@ -597,6 +743,12 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
               key: const Key('address-landmark'),
               controller: _landmark,
               label: 'Landmark (optional)',
+            ),
+            _field(
+              key: const Key('address-receiver'),
+              controller: _receiver,
+              label: 'Receiver name (optional)',
+              textCapitalization: TextCapitalization.words,
             ),
             _field(
               key: const Key('address-pincode'),
@@ -729,6 +881,7 @@ class _LocationCard extends StatelessWidget {
     required this.state,
     required this.failure,
     required this.accuracy,
+    required this.addressLookup,
     required this.error,
     required this.onCapture,
     required this.onRemove,
@@ -740,6 +893,7 @@ class _LocationCard extends StatelessWidget {
   final _LocationState state;
   final LocationCaptureFailure? failure;
   final double? accuracy;
+  final _AddressLookup addressLookup;
   final String? error;
   final VoidCallback? onCapture;
   final VoidCallback? onRemove;
@@ -764,9 +918,18 @@ class _LocationCard extends StatelessWidget {
       _LocationState.captured => (
         Icons.location_on,
         'Location pinned',
-        accuracy == null
-            ? 'Please confirm the house and area below.'
-            : 'Accurate to about ${accuracy!.round()} m. Please confirm the house and area below.',
+        [
+          if (accuracy != null) 'Accurate to about ${accuracy!.round()} m.',
+          switch (addressLookup) {
+            _AddressLookup.resolving => 'Finding your address…',
+            _AddressLookup.resolved =>
+              'We filled in your area, city, state and pincode. Add your house or flat below.',
+            _AddressLookup.failed =>
+              "We couldn't fill in the area automatically. Please enter it below.",
+            _AddressLookup.idle =>
+              'Please confirm the house and area below.',
+          },
+        ].join(' '),
       ),
       _LocationState.failed => (
         Icons.location_off_outlined,
