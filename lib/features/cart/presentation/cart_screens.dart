@@ -15,6 +15,7 @@ import '../../account/address/address_location_capture.dart';
 import '../../account/address/address_providers.dart';
 import '../../orders/data/repositories/orders_repository_impl.dart';
 import '../../app_state/providers/app_controller.dart';
+import '../../orders/providers/live_orders_provider.dart';
 import '../../orders/providers/orders_providers.dart';
 import '../../authentication/presentation/auth_screens.dart';
 import '../../app_state/providers/location_providers.dart';
@@ -728,11 +729,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       result.when(
         success: (placed) {
-          context.go(
-            grocery
-                ? '/tracking/${placed.orderId}?mode=grocery'
-                : '/tracking/${placed.orderId}',
-          );
+          final router = GoRouter.of(context);
+          final tracking = grocery
+              ? '/tracking/${placed.orderId}?mode=grocery'
+              : '/tracking/${placed.orderId}';
+          // Home goes underneath tracking, so Back from tracking lands on Home
+          // (with the live-order banner) instead of leaving the app, and the
+          // new order shows up there straight away.
+          ref.invalidate(liveOrdersProvider);
+          ref.invalidate(activeOrdersProvider);
+          router.go('/home');
+          router.push<void>(tracking);
         },
         failure: (failure) {
           _showError(failure.message);

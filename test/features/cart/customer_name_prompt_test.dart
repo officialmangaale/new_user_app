@@ -141,6 +141,10 @@ void main() {
       routes: [
         GoRoute(path: '/checkout', builder: (_, _) => const CheckoutScreen()),
         GoRoute(
+          path: '/home',
+          builder: (_, _) => const Scaffold(body: Text('home')),
+        ),
+        GoRoute(
           path: '/tracking/:id',
           builder: (_, _) => const Scaffold(body: Text('tracking')),
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -11,6 +12,23 @@ import '../../../shared/repositories/engagement_repository.dart';
 import '../../../shared/repositories/referral_repository.dart';
 import '../providers/engagement_providers.dart';
 import '../providers/referral_providers.dart';
+
+/// The text a customer sends to a friend: the backend's own message when it
+/// sent one, always carrying the code and the App Link the app opens
+/// (`https://mangaale.com/r/<code>`).
+String referralInviteText(ReferralSummary referral) {
+  final code = referral.code.trim();
+  var text = referral.shareMessage.trim();
+  if (text.isEmpty) {
+    text = 'Order food and groceries on Mangaale with my referral code $code.';
+  } else if (code.isNotEmpty && !text.contains(code)) {
+    text = '$text Code: $code';
+  }
+  if (code.isNotEmpty && !text.contains('mangaale.com/r/')) {
+    text = '$text\nhttps://mangaale.com/r/$code';
+  }
+  return text;
+}
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -79,26 +97,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
                       context,
                     ).textTheme.headlineLarge?.copyWith(color: Colors.white),
                   ),
-                  const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _walletButton(
-                          Icons.add_rounded,
-                          'Add Money',
-                          () => _amountSheet(context, false),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _walletButton(
-                          Icons.arrow_outward_rounded,
-                          'Withdraw',
-                          () => _amountSheet(context, true),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Add Money / Withdraw were removed: they opened a sheet that
+                  // promised UPI/bank transfers and then only showed a
+                  // "preview opened" toast. The wallet is credit-only for now
+                  // (cashback and referral rewards), payments are COD.
                   const Divider(color: Color(0x3317E6DB), height: 30),
                   // Derived from the ledger the backend returned — the API
                   // does not send a pre-aggregated breakdown, so nothing here
@@ -175,73 +177,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen>
       .where((item) => item.amount > 0)
       .fold(0, (sum, item) => sum + item.amount);
 
-  Widget _walletButton(IconData icon, String label, VoidCallback onTap) {
-    return FilledButton.icon(
-      onPressed: onTap,
-      style: FilledButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.dark,
-      ),
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-    );
-  }
-
-  void _amountSheet(BuildContext context, bool withdraw) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          4,
-          20,
-          MediaQuery.viewInsetsOf(context).bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              withdraw ? 'Withdraw money' : 'Add money',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              withdraw
-                  ? 'Transfer your eligible wallet balance to a verified bank account.'
-                  : 'Add securely using UPI, card or net banking.',
-            ),
-            const SizedBox(height: 18),
-            const TextField(
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                prefixText: '₹ ',
-                labelText: 'Amount',
-              ),
-            ),
-            const SizedBox(height: 16),
-            AppButton(
-              label: withdraw ? 'Continue to bank' : 'Continue to payment',
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      withdraw
-                          ? 'Withdrawal flow preview opened'
-                          : 'Add-money flow preview opened',
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _WalletStat extends StatelessWidget {
@@ -427,9 +362,16 @@ class ReferralScreen extends ConsumerWidget {
             children: [
               Expanded(
                 child: AppButton(
-                  label: 'Share',
-                  icon: Icons.ios_share_rounded,
-                  onPressed: () => _toast(context, 'Share preview opened'),
+                  label: 'Copy invite',
+                  icon: Icons.copy_rounded,
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: referralInviteText(referral)),
+                    );
+                    if (context.mounted) {
+                      _toast(context, 'Invite message copied');
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: 10),
@@ -438,7 +380,22 @@ class ReferralScreen extends ConsumerWidget {
                   label: 'WhatsApp',
                   outlined: true,
                   icon: Icons.chat_rounded,
-                  onPressed: () => _toast(context, 'WhatsApp preview opened'),
+                  onPressed: () async {
+                    var opened = false;
+                    try {
+                      opened = await launchUrl(
+                        Uri.https('wa.me', '/', {
+                          'text': referralInviteText(referral),
+                        }),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    } catch (_) {
+                      opened = false;
+                    }
+                    if (!opened && context.mounted) {
+                      _toast(context, 'Could not open WhatsApp.');
+                    }
+                  },
                 ),
               ),
             ],

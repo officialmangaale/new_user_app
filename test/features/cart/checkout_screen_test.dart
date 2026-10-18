@@ -149,6 +149,10 @@ void main() {
       routes: [
         GoRoute(path: '/checkout', builder: (_, _) => const CheckoutScreen()),
         GoRoute(
+          path: '/home',
+          builder: (_, _) => const Scaffold(body: Text('home')),
+        ),
+        GoRoute(
           path: '/tracking/:id',
           builder: (_, state) {
             location = '/tracking/${state.pathParameters['id']}';
@@ -216,6 +220,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.placeOrderCalls, 1);
     expect(find.text('tracking'), findsOneWidget);
+  });
+
+  testWidgets('Back from tracking after placing an order lands on Home', (
+    tester,
+  ) async {
+    final repository = _FakeOrdersRepository(
+      delay: const Duration(milliseconds: 50),
+    );
+    await pumpCheckout(tester, repository);
+
+    await tester.tap(payButton());
+    await tester.pumpAndSettle();
+    expect(find.text('tracking'), findsOneWidget);
+
+    // System back: Home is underneath tracking, so the app is not left.
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(handled, isTrue);
+    expect(find.text('home'), findsOneWidget);
+    expect(find.text('tracking'), findsNothing);
   });
 
   testWidgets('a backend failure shows a snackbar and re-enables the button', (

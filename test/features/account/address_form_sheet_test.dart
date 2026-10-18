@@ -5,11 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:turquoise_delivery/core/services/api_exception.dart';
+import 'package:turquoise_delivery/core/maps/map_capabilities.dart';
+import 'package:turquoise_delivery/core/services/reverse_geocoding_service.dart';
 import 'package:turquoise_delivery/features/account/address/address_form_logic.dart';
 import 'package:turquoise_delivery/features/account/address/address_form_sheet.dart';
 import 'package:turquoise_delivery/features/account/address/address_location_capture.dart';
 import 'package:turquoise_delivery/features/account/address/address_providers.dart';
 import 'package:turquoise_delivery/features/account/address/pincode_lookup.dart';
+import 'package:turquoise_delivery/features/app_state/providers/location_providers.dart';
 import 'package:turquoise_delivery/features/account/presentation/addresses_screen.dart';
 import 'package:turquoise_delivery/features/orders/providers/orders_providers.dart';
 import 'package:turquoise_delivery/shared/repositories/account_repository.dart';
@@ -45,6 +48,34 @@ class _FakeAccountRepository implements AccountRepository {
         };
     return handler(address);
   }
+
+  @override
+  Future<List<AddressPlaceSuggestion>> searchAddressPlaces({
+    required String query,
+    required String sessionToken,
+    double? latitude,
+    double? longitude,
+  }) async => const [
+    AddressPlaceSuggestion(
+      placeId: 'blr',
+      primaryText: 'Koramangala',
+      fullText: 'Koramangala, Bengaluru',
+    ),
+  ];
+
+  @override
+  Future<ResolvedCustomerLocation> resolveAddressPlace({
+    required String placeId,
+    required String sessionToken,
+  }) async => const ResolvedCustomerLocation(
+    area: 'Koramangala',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pincode: '560034',
+    latitude: 12.9352,
+    longitude: 77.6245,
+    formattedAddress: 'Koramangala, Bengaluru',
+  );
 
   @override
   Future<List<CustomerAddress>> fetchAddresses() async {
@@ -91,6 +122,27 @@ class _FakePincodeLookup implements PincodeLookup {
   }
 }
 
+/// Answers by coordinates, so a moved pin gets a different address.
+class _FakeReverseGeocoder implements ReverseGeocoder {
+  @override
+  Future<PlaceAddress?> reverse(double latitude, double longitude) async {
+    if (latitude > 20) {
+      return const PlaceAddress(
+        sublocality: 'Sector 49',
+        locality: 'Gurgaon',
+        state: 'Haryana',
+        postalCode: '122018',
+      );
+    }
+    return const PlaceAddress(
+      sublocality: 'Koramangala',
+      locality: 'Bengaluru',
+      state: 'Karnataka',
+      postalCode: '560034',
+    );
+  }
+}
+
 const _gurgaon = PincodeLookupResult.found(
   PincodeDetails(
     pincode: '122003',
@@ -123,6 +175,8 @@ void main() {
     accountRepositoryProvider.overrideWithValue(repository),
     addressLocationCaptureProvider.overrideWithValue(location),
     pincodeLookupProvider.overrideWithValue(pincode),
+    reverseGeocoderProvider.overrideWithValue(_FakeReverseGeocoder()),
+    customerPlacesAvailableProvider.overrideWithValue(true),
   ];
 
   Future<void> useTallScreen(WidgetTester tester) async {
@@ -422,6 +476,79 @@ void main() {
       expect(find.text(AddressCopy.gpsOff), findsOneWidget);
       await tester.tap(find.text('Turn on location'));
       expect(location.locationSettingsOpened, 1);
+    });
+
+    testWidgets('a pin moved to another place replaces the previous place pincode, '
+        'area and city', (tester) async {
+      location.result = LocationCaptureResult.captured(
+        CapturedLocation(
+          latitude: 28.4089,
+          longitude: 77.0532,
+          accuracyMeters: 25,
+          capturedAt: DateTime(2026, 9, 11),
+        ),
+      );
+      await openSheet(tester);
+      await tester.tap(find.byKey(const Key('address-use-location')));
+      await tester.pumpAndSettle();
+
+      String text(String key) => tester
+          .widget<TextFormField>(find.byKey(Key(key)))
+          .controller!
+          .text;
+      expect(text('address-pincode'), '122018');
+      expect(text('address-area'), 'Sector 49');
+
+      // The customer types their own flat, then pins a place ~1,400 km away.
+      await enter(tester, 'address-house', 'Flat 12B');
+      location.result = LocationCaptureResult.captured(
+        CapturedLocation(
+          latitude: 12.9352,
+          longitude: 77.6245,
+          accuracyMeters: 20,
+          capturedAt: DateTime(2026, 9, 11),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('address-use-location')));
+      await tester.pumpAndSettle();
+
+      expect(text('address-pincode'), '560034');
+      expect(text('address-area'), 'Koramangala');
+      expect(text('address-house'), 'Flat 12B');
+    });
+
+    testWidgets('picking a searched place far from the current location '
+        'replaces the current location pincode and area', (tester) async {
+      location.result = LocationCaptureResult.captured(
+        CapturedLocation(
+          latitude: 28.4089,
+          longitude: 77.0532,
+          accuracyMeters: 25,
+          capturedAt: DateTime(2026, 9, 11),
+        ),
+      );
+      await openSheet(tester);
+      await tester.tap(find.byKey(const Key('address-use-location')));
+      await tester.pumpAndSettle();
+
+      String text(String key) => tester
+          .widget<TextFormField>(find.byKey(Key(key)))
+          .controller!
+          .text;
+      expect(text('address-pincode'), '122018');
+
+      await tester.enterText(
+        find.byKey(const Key('address-place-search')),
+        'Koramangala',
+      );
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Koramangala').last);
+      await tester.pumpAndSettle();
+
+      expect(text('address-pincode'), '560034');
+      expect(text('address-area'), 'Koramangala');
+      expect(text('address-city'), 'Bengaluru');
     });
 
     testWidgets('a captured pin is saved with the address', (tester) async {

@@ -130,7 +130,7 @@ class _WaitingPuzzleGameState extends State<WaitingPuzzleGame> {
         ),
         title: const Text('Perfect match!'),
         content: Text(
-          'You scored $_score points in $_seconds seconds.\n\nDaily reward: +25 Turquoise Points',
+          'You scored $_score points in $_seconds seconds.\n\nDaily reward: +25 Mangaale Points',
         ),
         actions: [
           FilledButton(

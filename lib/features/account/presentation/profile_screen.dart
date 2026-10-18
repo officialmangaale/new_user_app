@@ -6,7 +6,6 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 
 import '../../../core/services/api_exception.dart';
-import '../../../core/widgets/app_ui.dart';
 import '../../../shared/repositories/account_repository.dart';
 import '../../app_state/providers/app_controller.dart';
 import '../../authentication/presentation/auth_screens.dart';
@@ -717,19 +716,9 @@ class InformationScreen extends ConsumerWidget {
                       color: AppColors.textSecondary,
                     ),
               ),
-              const SizedBox(height: 24),
-              if (title.contains('Support') || title.contains('Issue'))
-                AppButton(
-                  label: title == 'Chat with Support'
-                      ? 'Start chat'
-                      : 'Contact support',
-                  icon: Icons.chat_bubble_outline_rounded,
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Support conversation preview opened'),
-                    ),
-                  ),
-                ),
+              // A "Start chat" / "Contact support" button used to sit here and
+              // only showed a "preview opened" toast. There is no customer
+              // support channel behind it, so it was removed rather than faked.
             ],
           ),
         ),

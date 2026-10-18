@@ -10,6 +10,7 @@ import '../../features/app_state/providers/app_controller.dart';
 import '../../features/authentication/presentation/auth_screens.dart';
 import '../../features/authentication/presentation/referral_capture_screen.dart';
 import '../../features/cart/presentation/cart_screens.dart';
+import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/catalog/presentation/catalog_detail_screens.dart';
 import '../../features/catalog/presentation/category_items_screen.dart';
 import '../../features/catalog/presentation/search_screen.dart';
@@ -135,6 +136,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => TrackingScreen(
           orderId: state.pathParameters['id']!,
           mode: _modeFrom(state.uri.queryParameters['mode']),
+        ),
+      ),
+      // Chat is bound to the order id in the path; the rider's name is only a
+      // title. Who may read or write is decided by the backend.
+      GoRoute(
+        path: '/tracking/:id/chat',
+        builder: (_, state) => ChatScreen(
+          orderId: state.pathParameters['id']!,
+          riderName: state.uri.queryParameters['rider'] ?? '',
         ),
       ),
       GoRoute(path: '/wallet', builder: (_, _) => const WalletScreen()),

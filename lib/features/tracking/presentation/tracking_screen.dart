@@ -3,15 +3,19 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/maps/map_capabilities.dart';
+import '../../../core/services/ongoing_order_notification.dart';
 import '../../../core/widgets/app_ui.dart';
 import '../../../shared/models/app_models.dart';
 import '../../authentication/providers/auth_providers.dart';
+import '../../chat/domain/chat_models.dart';
+import '../../chat/providers/chat_controller.dart';
 import '../../orders/providers/orders_providers.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'live_tracking_map.dart';
@@ -20,6 +24,9 @@ import '../domain/rider_assignment_state.dart';
 import '../domain/tracking_refresh_policy.dart';
 import '../domain/grocery_tracking.dart';
 import '../domain/tracking_timeline.dart';
+
+/// Where the back arrow leads when the screen has no history to pop.
+const String trackingBackFallback = '/home';
 
 class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({
@@ -106,6 +113,9 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   void _refresh() {
     _lastRefreshAt = DateTime.now();
     ref.invalidate(orderTrackingProvider(_request));
+    if (widget.mode != DeliveryMode.grocery) {
+      ref.invalidate(chatSummaryProvider(widget.orderId));
+    }
   }
 
   void _stopPolling() {
@@ -297,6 +307,33 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
   @override
   Widget build(BuildContext context) {
     final tracking = ref.watch(orderTrackingProvider(_request));
+    // Keep the ongoing notification (shade / lock screen) on the live status
+    // so it is right the moment the app is minimised.
+    ref.listen<AsyncValue<OrderTracking>>(orderTrackingProvider(_request), (
+      _,
+      next,
+    ) {
+      final value = next.value;
+      if (value == null) return;
+      final status = value.status.trim().toLowerCase();
+      if (LiveOrderNotice.terminalStatuses.contains(status)) {
+        unawaited(OngoingOrderNotification.cancel(widget.orderId));
+        return;
+      }
+      final label = value.statusLabel.trim();
+      unawaited(
+        OngoingOrderNotification.show(
+          LiveOrderNotice(
+            orderId: widget.orderId,
+            title: value.restaurantName.trim().isEmpty
+                ? 'Order #${widget.orderId}'
+                : value.restaurantName.trim(),
+            body: label.isNotEmpty ? label : LiveOrderNotice.labelFor(status),
+            grocery: widget.mode == DeliveryMode.grocery,
+          ),
+        ),
+      );
+    });
     final live = _effectiveTracking(tracking.value);
     if (widget.mode == DeliveryMode.grocery) {
       if (live != null) _syncGroceryStatus(live);
@@ -318,19 +355,25 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     final riderAssigned = riderState == RiderAssignmentState.assigned;
     final riderLabel = riderAssigned ? riderName : riderSearchTitle(riderState);
     final riderPhone = live?.riderPhone.trim() ?? '';
+    final chatEnabled = chatButtonEnabled(
+      riderAssigned: riderAssigned,
+      status: live?.status ?? '',
+    );
     final statusMessage = live?.statusLabel.trim() ?? '';
     final deliveryNote = statusMessage.isNotEmpty
         ? statusMessage
         : riderName.isNotEmpty
         ? '$riderName is handling your delivery'
         : 'Live tracking updates will appear here';
-    return Scaffold(
+    final scaffold = Scaffold(
       body: Padding(
         padding: EdgeInsets.zero,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
               pinned: true,
+              automaticallyImplyLeading: false,
+              leading: _backButton(),
               title: Text('Order #${widget.orderId}'),
               actions: [
                 IconButton(
@@ -458,8 +501,14 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                       phone: riderPhone,
                       onCall: riderPhone.isEmpty
                           ? null
-                          : () => _toast('Calling $riderLabel…'),
-                      onChat: () => _toast('Rider chat preview opened'),
+                          : () => _callRider(riderPhone),
+                      onChat: chatEnabled ? () => _openChat(riderName) : null,
+                      chatUnread:
+                          ref
+                              .watch(chatSummaryProvider(widget.orderId))
+                              .value
+                              ?.unreadCount ??
+                          0,
                       onSafety: () => _safetySheet(context),
                     )
                   else if (riderState != RiderAssignmentState.none)
@@ -491,6 +540,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ),
       ),
     );
+    return _backScope(scaffold);
   }
 
   /// Grocery orders have no rider, so only the status decides whether polling
@@ -556,15 +606,77 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
         ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: Text('Grocery order #${widget.orderId}')),
-      body: body,
+    return _backScope(
+      Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: _backButton(),
+          title: Text('Grocery order #${widget.orderId}'),
+        ),
+        body: body,
+      ),
     );
+  }
+
+  /// The single rule for leaving this screen, used by both the visible arrow
+  /// and the system back: pop when there is history, otherwise go to Orders.
+  /// Without the fallback, a screen opened from a notification, a link, or
+  /// after placing an order (which replaces the stack) would exit the app.
+  void _leave() {
+    final router = GoRouter.maybeOf(context);
+    if (router == null) {
+      // Not under the app router (embedded or in a test): plain navigator.
+      Navigator.of(context).maybePop();
+    } else if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go(trackingBackFallback);
+    }
+  }
+
+  Widget _backScope(Widget child) => PopScope(
+    canPop: GoRouter.maybeOf(context)?.canPop() ?? true,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _leave();
+    },
+    child: child,
+  );
+
+  Widget _backButton() => IconButton(
+    key: const Key('tracking-back'),
+    tooltip: 'Back',
+    icon: const Icon(Icons.arrow_back_rounded),
+    onPressed: _leave,
+  );
+
+  Future<void> _openChat(String riderName) async {
+    final name = Uri.encodeQueryComponent(riderName);
+    await GoRouter.of(context).push(
+      '/tracking/${widget.orderId}/chat?rider=$name',
+    );
+    if (mounted) ref.invalidate(chatSummaryProvider(widget.orderId));
   }
 
   void _toast(String message) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(message)));
+
+  /// Hands the rider's number to the phone dialler. The old button only showed a
+  /// "Calling…" toast and never dialled.
+  Future<void> _callRider(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (digits.isEmpty) {
+      _toast('The rider\'s phone number is not available.');
+      return;
+    }
+    var opened = false;
+    try {
+      opened = await launchUrl(Uri(scheme: 'tel', path: digits));
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) _toast('Could not open the phone dialler.');
+  }
 
   /// Opens the rider's live position in Google Maps (or whatever handles the
   /// link). Prefers the backend-supplied deep link so the URL format lives in
@@ -897,13 +1009,16 @@ class RiderInformationCard extends StatelessWidget {
     required this.onCall,
     required this.onChat,
     required this.onSafety,
+    this.chatUnread = 0,
     super.key,
   });
   final String name;
   final String phone;
   final VoidCallback? onCall;
-  final VoidCallback onChat;
+  /// Null while chat is closed (no rider yet, or the order has ended).
+  final VoidCallback? onChat;
   final VoidCallback onSafety;
+  final int chatUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -963,9 +1078,12 @@ class RiderInformationCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 _RiderAction(
+                  key: const Key('tracking-chat'),
                   icon: Icons.chat_bubble_outline_rounded,
                   label: 'Chat',
                   onTap: onChat,
+                  active: onChat != null,
+                  badge: chatUnread,
                 ),
               ],
             ),
@@ -998,37 +1116,89 @@ class _RiderAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.active = false,
+    this.badge = 0,
+    super.key,
   });
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
 
+  /// Draws the circle in the brand colour. Call keeps its original look.
+  final bool active;
+  final int badge;
+
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(14),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: AppColors.light,
-            child: Icon(
-              icon,
-              color: onTap == null ? AppColors.textMuted : AppColors.dark,
-              size: 18,
-            ),
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final highlighted = active && enabled;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: badge > 0 ? '$label, $badge unread' : label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    radius: 19,
+                    backgroundColor: highlighted
+                        ? AppColors.primary
+                        : AppColors.light,
+                    child: Icon(
+                      icon,
+                      color: highlighted
+                          ? AppColors.onPrimary
+                          : (enabled ? AppColors.dark : AppColors.textMuted),
+                      size: 18,
+                    ),
+                  ),
+                  if (badge > 0)
+                    Positioned(
+                      right: -4,
+                      top: -4,
+                      child: Container(
+                        key: const Key('chat-unread-badge'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          badge > 9 ? '9+' : '$badge',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _StatusTimeline extends StatelessWidget {

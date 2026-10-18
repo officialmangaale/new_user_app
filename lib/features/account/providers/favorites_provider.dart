@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../orders/providers/orders_providers.dart';
 import '../../../shared/models/app_models.dart';
-import '../../../shared/repositories/account_repository.dart';
 
 final favoriteRestaurantsProvider = FutureProvider.autoDispose<List<FavoriteRestaurant>>((ref) async {
   return ref.read(accountRepositoryProvider).fetchFavoriteRestaurants();

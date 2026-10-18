@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same turquoise as AppColors.primary, so the native launch window and the
+         Flutter splash are one continuous screen (no white flash). -->
+    <color name="launch_background_color">#17E6DB</color>
+</resources>

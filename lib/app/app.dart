@@ -17,6 +17,7 @@ class TurquoiseApp extends ConsumerStatefulWidget {
 
 class _TurquoiseAppState extends ConsumerState<TurquoiseApp> {
   GroceryOrderPushTarget? _pendingGroceryOrder;
+  FoodOrderPushTarget? _pendingFoodOrder;
 
   @override
   void initState() {
@@ -25,7 +26,16 @@ class _TurquoiseAppState extends ConsumerState<TurquoiseApp> {
     // signed in. The tracking screen re-reads the order, so the backend decides
     // whether this customer may see it.
     ref.listenManual<AppState>(appControllerProvider, (_, next) {
-      if (next.authenticated) _openPendingGroceryOrder();
+      if (next.authenticated) {
+        _openPendingGroceryOrder();
+        _openPendingFoodOrder();
+      }
+    });
+    // Tapping the ongoing order notification or an order status push opens
+    // that order's tracking screen.
+    GroceryPushOpenBroker.instance.attachFood((target) {
+      _pendingFoodOrder = target;
+      _openPendingFoodOrder();
     });
     GroceryPushOpenBroker.instance.attach((target) {
       _pendingGroceryOrder = target;
@@ -37,6 +47,20 @@ class _TurquoiseAppState extends ConsumerState<TurquoiseApp> {
   void dispose() {
     GroceryPushOpenBroker.instance.detach();
     super.dispose();
+  }
+
+  void _openPendingFoodOrder() {
+    final target = _pendingFoodOrder;
+    if (target == null || !ref.read(appControllerProvider).authenticated) {
+      return;
+    }
+    _pendingFoodOrder = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        ref.read(appRouterProvider).push<void>('/tracking/${target.orderId}'),
+      );
+    });
   }
 
   void _openPendingGroceryOrder() {

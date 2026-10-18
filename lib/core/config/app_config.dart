@@ -36,6 +36,18 @@ class AppConfig {
     defaultValue: restaurantServiceBaseUrl,
   );
 
+  /// rider-service owns the delivery, so it also owns the customer <-> rider
+  /// chat for that delivery. It accepts the same customer JWT.
+  static const String riderServiceBaseUrl = String.fromEnvironment(
+    'RIDER_SERVICE_BASE_URL',
+    defaultValue: 'https://rider-prod.mangaale.com',
+  );
+
+  static const String riderServiceWsBaseUrl = String.fromEnvironment(
+    'RIDER_SERVICE_WS_BASE_URL',
+    defaultValue: riderServiceBaseUrl,
+  );
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
 }

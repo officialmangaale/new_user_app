@@ -15,6 +15,9 @@ import '../../app_state/providers/app_controller.dart';
 import '../../notifications/providers/device_token_providers.dart';
 import '../providers/auth_providers.dart';
 
+/// Wordmark shown on the splash and welcome screens.
+const String kBrandWordmark = 'mangaale';
+
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
@@ -22,71 +25,192 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  /// Long enough for the intro to finish, short enough not to feel slow.
+  static const _introDuration = Duration(milliseconds: 1700);
+  static const _holdAfterIntro = Duration(milliseconds: 450);
+
+  late final AnimationController _intro = AnimationController(
+    vsync: this,
+    duration: _introDuration,
+  );
   Timer? _navigationTimer;
+  bool _started = false;
 
   @override
-  void initState() {
-    super.initState();
-    _navigationTimer = Timer(const Duration(milliseconds: 1300), () {
-      if (!mounted) return;
-      final authenticated = ref.read(appControllerProvider).authenticated;
-      // Refresh the stored push token on every restored session; FCM rotates
-      // tokens and the server would otherwise keep a stale one.
-      if (authenticated) {
-        unawaited(ref.read(deviceTokenRegistrarProvider).register());
-      }
-      context.go(authenticated ? '/home' : '/welcome');
-    });
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // Reduced motion: show the finished frame, keep the original short hold.
+    final reduced = MediaQuery.of(context).disableAnimations;
+    if (reduced) {
+      _intro.value = 1;
+    } else {
+      _intro.forward();
+    }
+    _navigationTimer = Timer(
+      reduced
+          ? const Duration(milliseconds: 1300)
+          : _introDuration + _holdAfterIntro,
+      _continue,
+    );
+  }
+
+  void _continue() {
+    if (!mounted) return;
+    final authenticated = ref.read(appControllerProvider).authenticated;
+    // Refresh the stored push token on every restored session; FCM rotates
+    // tokens and the server would otherwise keep a stale one.
+    if (authenticated) {
+      unawaited(ref.read(deviceTokenRegistrarProvider).register());
+    }
+    context.go(authenticated ? '/home' : '/welcome');
   }
 
   @override
   void dispose() {
     _navigationTimer?.cancel();
+    _intro.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final letters = kBrandWordmark.split('');
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 94,
-                height: 94,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x26000000), blurRadius: 24),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.delivery_dining_rounded,
-                  size: 54,
-                  color: AppColors.dark,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'turquoise',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppColors.onPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Food, groceries & savings — together.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppColors.onPrimary),
-              ),
-            ],
+          child: AnimatedBuilder(
+            animation: _intro,
+            builder: (context, _) {
+              final t = _intro.value;
+              // Logo tile: pops in with a slight overshoot, then settles.
+              final logo = Curves.elasticOut.transform(
+                const Interval(0, 0.45).transform(t),
+              );
+              final logoFade = const Interval(
+                0,
+                0.2,
+                curve: Curves.easeOut,
+              ).transform(t);
+              // A ring that expands and fades once, behind the tile.
+              final ring = const Interval(
+                0.15,
+                0.8,
+                curve: Curves.easeOutCubic,
+              ).transform(t);
+              final tagline = const Interval(
+                0.72,
+                1,
+                curve: Curves.easeOut,
+              ).transform(t);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 150,
+                    height: 150,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Opacity(
+                          opacity: (1 - ring).clamp(0.0, 1.0) * 0.55,
+                          child: Container(
+                            width: 94 + 56 * ring,
+                            height: 94 + 56 * ring,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.onPrimary,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Opacity(
+                          opacity: logoFade,
+                          child: Transform.scale(
+                            scale: 0.55 + 0.45 * logo,
+                            child: Container(
+                              width: 94,
+                              height: 94,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x26000000),
+                                    blurRadius: 24,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.delivery_dining_rounded,
+                                size: 54,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // Wordmark: each letter rises and fades in, one after the
+                  // next. Semantics reads it as one word.
+                  Semantics(
+                    label: kBrandWordmark,
+                    excludeSemantics: true,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < letters.length; i++)
+                          _letter(context, letters[i], i, letters.length, t),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Opacity(
+                    opacity: tagline,
+                    child: Transform.translate(
+                      offset: Offset(0, 8 * (1 - tagline)),
+                      child: Text(
+                        'Food, groceries & savings — together.',
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(color: AppColors.onPrimary),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _letter(BuildContext context, String ch, int i, int n, double t) {
+    // Letters occupy 0.35 .. 0.85 of the timeline, staggered.
+    final begin = 0.35 + 0.5 * (i / n);
+    final p = Interval(
+      begin,
+      (begin + 0.2).clamp(0.0, 1.0),
+      curve: Curves.easeOutBack,
+    ).transform(t);
+    return Opacity(
+      opacity: p.clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(0, 14 * (1 - p)),
+        child: Text(
+          ch,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            color: AppColors.onPrimary,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
           ),
         ),
       ),
@@ -206,7 +330,7 @@ class _BrandMark extends StatelessWidget {
         const SizedBox(width: 9),
         const Flexible(
           child: Text(
-            'turquoise',
+            kBrandWordmark,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

@@ -19,6 +19,7 @@ import '../../orders/presentation/orders_screen.dart';
 import '../../orders/providers/orders_providers.dart';
 import '../../shared_orders/presentation/shared_order_screens.dart';
 import 'widgets/home_header.dart';
+import 'widgets/live_order_banner.dart';
 import 'widgets/home_offer_carousel.dart';
 import 'widgets/home_sections.dart';
 import 'widgets/home_skeleton.dart';
@@ -187,6 +188,10 @@ class _DeliveryHomeFeedState extends ConsumerState<DeliveryHomeFeed> {
               onSearchTap: () => context.push('/search'),
             ),
           ),
+          // A customer with an unfinished order sees it first, with a one-tap
+          // way back to tracking.
+          if (state.authenticated)
+            const SliverToBoxAdapter(child: LiveOrderBanner()),
           if (filterOptions.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(

@@ -18,13 +18,18 @@ class ApiClient {
   ApiClient({
     Dio? restaurantDio,
     Dio? userDio,
+    Dio? riderDio,
     TokenReader? tokenReader,
     UnauthorizedHandler? onUnauthorized,
   }) : restaurant =
            restaurantDio ?? _build(AppConfig.restaurantServiceBaseUrl),
-       user = userDio ?? _build(AppConfig.userServiceBaseUrl) {
+       user = userDio ?? _build(AppConfig.userServiceBaseUrl),
+       rider = riderDio ?? _build(AppConfig.riderServiceBaseUrl) {
     _attachInterceptors(restaurant, tokenReader, onUnauthorized);
     _attachInterceptors(user, tokenReader, onUnauthorized);
+    // No onUnauthorized here: a chat request being refused must never sign the
+    // customer out of the app. The chat screen reports it instead.
+    _attachInterceptors(rider, tokenReader, null);
   }
 
   /// restaurant-service: catalog, cart, orders, tracking, notifications.
@@ -32,6 +37,9 @@ class ApiClient {
 
   /// user-service: customer OTP auth, profile, addresses.
   final Dio user;
+
+  /// rider-service: customer <-> rider chat for an active delivery.
+  final Dio rider;
 
   /// Retained so existing callers that referenced `client.dio` keep compiling.
   Dio get dio => restaurant;

@@ -934,42 +934,20 @@ class InviteFriendsScreen extends ConsumerWidget {
                 border: Border.all(color: AppColors.border),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'turquoise.app/join/TQ8SAVE',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => _message(context, 'Invite link copied'),
-                    icon: const Icon(Icons.copy_rounded, color: AppColors.dark),
-                  ),
-                ],
+              // This screen used to show a hard-coded "turquoise.app/join/..."
+              // link with a copy button that only said "copied". The backend
+              // has no join link for a group and the app has no deep link for
+              // one, so say what actually works instead of inventing a link.
+              child: const Text(
+                'Invite links for shared orders are not available yet. '
+                'Friends nearby can join this group from the Shared orders '
+                'list.',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
-            ),
-            const SizedBox(height: 18),
-            AppButton(
-              label: 'Share on WhatsApp',
-              icon: Icons.chat_rounded,
-              onPressed: () =>
-                  _message(context, 'WhatsApp share preview opened'),
-            ),
-            const SizedBox(height: 10),
-            AppButton(
-              label: 'Share invite link',
-              outlined: true,
-              icon: Icons.ios_share_rounded,
-              onPressed: () => _message(context, 'Share sheet preview opened'),
             ),
           ],
         ),
       ),
     );
-  }
-
-  void _message(BuildContext context, String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 }

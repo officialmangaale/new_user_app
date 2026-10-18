@@ -106,6 +106,11 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
   String? _autoState;
   String? _autoArea;
   String? _autoPincode;
+  String? _autoHouse;
+  // The pin the auto-filled fields were resolved for. When the pin moves far
+  // from it, those fields describe another place and are cleared.
+  double? _autoOriginLat;
+  double? _autoOriginLng;
   _AddressLookup _addressLookup = _AddressLookup.idle;
   int _geocodeSeq = 0;
   String _district = '';
@@ -169,6 +174,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     final resolved = view.placeAddress;
     if (resolved != null) {
       _applyGeocoded(resolved);
+      _autoOriginLat = location.latitude;
+      _autoOriginLng = location.longitude;
       _addressLookup = _AddressLookup.resolved;
     } else if (view.addressFailed) {
       _addressLookup = _AddressLookup.failed;
@@ -320,30 +327,79 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     required bool updatePin,
   }) {
     if (updatePin && resolved.hasPin) {
+      _pinChanged(resolved.latitude!, resolved.longitude!);
       _latitude = resolved.latitude;
       _longitude = resolved.longitude;
       _accuracy = null;
       _locationState = _LocationState.captured;
       _locationFailure = null;
     }
-    if (_house.text.trim().isEmpty && resolved.addressLine1.isNotEmpty) {
+    // A field is filled when it is empty or still holds what an earlier lookup
+    // filled. Filling only EMPTY fields left the previous pin's pincode, area
+    // and house in place after the pin was moved, so the saved address
+    // described the old place.
+    bool mayFill(TextEditingController c, String? lastAuto) =>
+        c.text.trim().isEmpty || c.text.trim() == (lastAuto ?? '').trim();
+    if (resolved.addressLine1.isNotEmpty && mayFill(_house, _autoHouse)) {
       _house.text = resolved.addressLine1;
+      _autoHouse = resolved.addressLine1;
     }
-    if (_area.text.trim().isEmpty && resolved.area.isNotEmpty) {
+    if (resolved.area.isNotEmpty && mayFill(_area, _autoArea)) {
       _area.text = resolved.area;
+      _autoArea = resolved.area;
     }
-    if (_city.text.trim().isEmpty && resolved.city.isNotEmpty) {
+    if (resolved.city.isNotEmpty && mayFill(_city, _autoCity)) {
       _city.text = resolved.city;
+      _autoCity = resolved.city;
     }
-    if (_state.text.trim().isEmpty && resolved.state.isNotEmpty) {
+    if (resolved.state.isNotEmpty && mayFill(_state, _autoState)) {
       _state.text = resolved.state;
+      _autoState = resolved.state;
     }
-    if (_pincode.text.trim().isEmpty && resolved.pincode.isNotEmpty) {
+    if (resolved.pincode.isNotEmpty && mayFill(_pincode, _autoPincode)) {
       _pincode.text = resolved.pincode;
+      _autoPincode = resolved.pincode;
     }
-    if (_district.isEmpty && resolved.district.isNotEmpty) {
+    if (resolved.district.isNotEmpty) {
       _district = resolved.district;
     }
+    final lat = resolved.latitude ?? _latitude;
+    final lng = resolved.longitude ?? _longitude;
+    if (isValidCoordinate(lat, lng)) {
+      _autoOriginLat = lat;
+      _autoOriginLng = lng;
+    }
+  }
+
+  /// Called before the pin is set to a new place. If it is far from the pin the
+  /// auto-filled fields were resolved for, those fields describe another place:
+  /// clear what a lookup filled (never what the customer typed), and make any
+  /// lookup still in flight for the old pin irrelevant.
+  void _pinChanged(double latitude, double longitude) {
+    _geocodeSeq++;
+    final oLat = _autoOriginLat;
+    final oLng = _autoOriginLng;
+    if (oLat == null || oLng == null) return;
+    if (metersBetween(oLat, oLng, latitude, longitude) <=
+        addressPinStaleMeters) {
+      return;
+    }
+    void clearIfAuto(TextEditingController c, String? auto) {
+      if (auto != null && c.text.trim() == auto.trim()) c.clear();
+    }
+
+    clearIfAuto(_house, _autoHouse);
+    clearIfAuto(_area, _autoArea);
+    clearIfAuto(_city, _autoCity);
+    clearIfAuto(_state, _autoState);
+    clearIfAuto(_pincode, _autoPincode);
+    _autoHouse = _autoArea = _autoCity = _autoState = _autoPincode = null;
+    _district = '';
+    _pincodeState = _PincodeState.idle;
+    _pincodeDetails = null;
+    _selectedPostOffice = null;
+    _autoOriginLat = null;
+    _autoOriginLng = null;
   }
 
   Future<void> _openMapPicker({
@@ -362,6 +418,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     );
     if (!mounted || result == null) return;
     setState(() {
+      _pinChanged(result.latitude, result.longitude);
       _latitude = result.latitude;
       _longitude = result.longitude;
       _accuracy = null;
@@ -390,6 +447,7 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
       final location = result.location;
       if (location != null) {
         captured = location;
+        _pinChanged(location.latitude, location.longitude);
         _latitude = location.latitude;
         _longitude = location.longitude;
         _accuracy = location.accuracyMeters;
@@ -433,6 +491,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
     setState(() {
       if (address != null && address.isMeaningful) {
         _applyGeocoded(address);
+        _autoOriginLat = latitude;
+        _autoOriginLng = longitude;
         _addressLookup = _AddressLookup.resolved;
       } else {
         _addressLookup = _AddressLookup.failed;
@@ -475,6 +535,8 @@ class _AddressFormSheetState extends ConsumerState<AddressFormSheet> {
 
   void _removeLocation() {
     _geocodeSeq++;
+    _autoOriginLat = null;
+    _autoOriginLng = null;
     setState(() {
       _addressLookup = _AddressLookup.idle;
       _latitude = null;

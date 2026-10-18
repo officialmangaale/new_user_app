@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../account/providers/engagement_providers.dart';
 import '../../account/providers/referral_providers.dart';
+import '../../../core/services/ongoing_order_notification.dart';
+import '../../orders/providers/live_orders_provider.dart';
 import '../../orders/providers/orders_providers.dart';
 
 /// Providers whose cached value belongs to one signed-in customer.
@@ -27,6 +29,9 @@ void invalidateSessionScopedProviders(Ref ref) {
   // Orders
   ref.invalidate(ordersProvider);
   ref.invalidate(activeOrdersProvider);
+  ref.invalidate(liveOrdersProvider);
+  // Nothing of the previous customer may stay in the notification shade.
+  OngoingOrderNotification.clearAll();
   ref.invalidate(notificationsProvider);
   ref.invalidate(cartBillProvider);
 

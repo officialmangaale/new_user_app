@@ -281,20 +281,22 @@ class OrdersRepositoryImpl implements OrdersRepositoryInterface {
     }
   }
 
-  /// GET /customer-web/orders/active — orders still in progress.
+  /// Orders still in progress.
+  ///
+  /// restaurant-service has no `/customer-web/orders/active` route (that path
+  /// is matched as `/orders/:id` with id "active"), so the customer's recent
+  /// orders are listed and the unfinished ones kept.
   @override
   Future<Result<List<DeliveryOrder>>> fetchActiveOrders() async {
-    try {
-      final raw = await _get('/customer-web/orders/active');
-      return Result.success(
-        listFrom(
-          raw,
-          keys: const ['orders', 'items', 'results'],
-        ).map(_order).toList(growable: false),
-      );
-    } on ApiException catch (error) {
-      return Result.failure(Failure.fromApiException(error));
-    }
+    final result = await fetchOrders(limit: 20);
+    return result.when(
+      success: (orders) => Result.success(
+        orders
+            .where((o) => o.status == OrderStatus.active)
+            .toList(growable: false),
+      ),
+      failure: (failure) => Result.failure(failure),
+    );
   }
 
   /// GET /customer-web/orders/:id

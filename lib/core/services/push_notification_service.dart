@@ -1,17 +1,24 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'grocery_push_open_broker.dart';
+import 'ongoing_order_notification.dart';
 
 /// Top-level background message handler for FCM.
 /// This must be a top-level function.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   log('Handling a background message: ${message.messageId}');
-  // You can process background data here (e.g. updating local database)
+  // Keeps the order visible in the shade (and on the lock screen) while the
+  // app is minimised: an order status push updates, or clears, its ongoing
+  // notification.
+  DartPluginRegistrant.ensureInitialized();
+  await OngoingOrderNotification.initializeForBackground();
+  await OngoingOrderNotification.handlePush(message.data);
 }
 
 class PushNotificationService {
@@ -110,6 +117,9 @@ class PushNotificationService {
 
   void _onForegroundMessage(RemoteMessage message) {
     log('Received foreground message: ${message.messageId}');
+    // Keep the ongoing order notification current so it is already correct
+    // the moment the app is minimised.
+    OngoingOrderNotification.handlePush(message.data);
     final notification = message.notification;
     final android = message.notification?.android;
 

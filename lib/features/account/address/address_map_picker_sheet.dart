@@ -153,11 +153,22 @@ class _AddressMapPickerSheetState
   }
 
   void _confirm() {
+    // The address in hand is only valid for the pin it was resolved for. If the
+    // customer moved the pin and confirmed before the lookup caught up, handing
+    // back the old pin's address is how the previous place's pincode ended up
+    // on the new pin. Return nothing and let the form resolve the new pin.
+    final resolved = _resolved;
+    final fresh =
+        resolved != null &&
+        !_resolving &&
+        resolved.hasPin &&
+        (resolved.latitude! - _selected.latitude).abs() < 0.000001 &&
+        (resolved.longitude! - _selected.longitude).abs() < 0.000001;
     Navigator.of(context).pop(
       AddressMapPickerResult(
         latitude: _selected.latitude,
         longitude: _selected.longitude,
-        resolved: _resolved,
+        resolved: fresh ? resolved : null,
       ),
     );
   }

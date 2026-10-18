@@ -144,6 +144,34 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // Flutter makes AGP configure an EMPTY CMake project just so it downloads the
+    // NDK, and by default puts that project's build folder at <project>/build/.cxx.
+    // On Windows that folder is the one that fails a build with "being used by
+    // another process" (antivirus, an IDE indexer, or a Gradle run that has not
+    // exited yet, especially right after `flutter clean`). Keep it outside the
+    // project, in a path with no spaces. Same empty CMake file Flutter would use;
+    // if it is not found the Flutter default applies unchanged.
+    run {
+        val flutterSdk = localProperties.getProperty("flutter.sdk")
+        val emptyCmake = flutterSdk?.let {
+            File(it, "packages/flutter_tools/gradle/src/main/scripts/CMakeLists.txt")
+        }
+        if (emptyCmake != null && emptyCmake.exists()) {
+            externalNativeBuild {
+                cmake {
+                    path = emptyCmake
+                    buildStagingDirectory =
+                        File(System.getProperty("user.home"), ".mangaale-cxx/customer-app")
+                }
+            }
+            defaultConfig {
+                externalNativeBuild {
+                    cmake { arguments("-Wno-dev", "--no-warn-unused-cli") }
+                }
+            }
+        }
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
